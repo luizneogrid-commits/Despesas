@@ -56,12 +56,26 @@ export function FolderPanel() {
         </div>
         <div className="notice">
           <FolderSync size={16} aria-hidden="true" />
-          <span>
-            Ler automaticamente os arquivos salvos numa pasta funciona no{' '}
-            <strong>Chrome ou Edge do computador</strong>. Neste navegador, envie os arquivos pelo
-            botão acima
-            <span className="only-touch"> ou, no Android, pelo menu Compartilhar → Raio-X</span>.
-          </span>
+          {window.top !== window ? (
+            <span>
+              A pasta monitorada não funciona dentro desta janela incorporada. Abra o app em{' '}
+              <a
+                href="https://luizneogrid-commits.github.io/Despesas/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                luizneogrid-commits.github.io/Despesas
+              </a>{' '}
+              no Chrome ou Edge do computador.
+            </span>
+          ) : (
+            <span>
+              Ler automaticamente os arquivos salvos numa pasta funciona no{' '}
+              <strong>Chrome ou Edge do computador</strong>. Neste navegador, envie os arquivos pelo
+              botão acima
+              <span className="only-touch"> ou, no Android, pelo menu Compartilhar → Raio-X</span>.
+            </span>
+          )}
         </div>
       </section>
     );

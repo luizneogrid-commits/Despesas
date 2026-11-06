@@ -6,6 +6,8 @@
 export function registerServiceWorker(onUpdateReady: (apply: () => void) => void): void {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   if (window.top !== window) return; // ex.: dentro do Artifact do Claude
+  // Só a versão instalável (com manifesto) tem service worker; a página única do Artifact não.
+  if (!document.querySelector('link[rel="manifest"]')) return;
 
   let accepted = false;
   const start = async () => {

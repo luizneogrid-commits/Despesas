@@ -71,7 +71,9 @@ interface FolderState {
 }
 
 export const useFolder = create<FolderState>()(() => ({
-  supported: typeof window !== 'undefined' && 'showDirectoryPicker' in window,
+  // Dentro de iframes restritos (ex.: Artifact do Claude) o seletor de pasta é bloqueado.
+  supported:
+    typeof window !== 'undefined' && 'showDirectoryPicker' in window && window.top === window,
   status: 'desligado',
   log: [],
   mode: 'quando-confere',
