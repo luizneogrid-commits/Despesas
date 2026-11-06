@@ -1,6 +1,6 @@
 import { normalizeText, prettifyDescription } from '../categorization/normalize';
 import { inferYear, isValidDate, parseISO, toISO, todayISO, yearMonth } from '../domain/dates';
-import type { Installment, TxKind } from '../domain/types';
+import type { AccountType, Installment, TxKind } from '../domain/types';
 import { BREAK_LINE } from './lines';
 import {
   detectIssuer,
@@ -10,6 +10,8 @@ import {
   findDueDate,
   type IssuerInfo,
 } from './metadata';
+import { detectDocumentType } from './metadata';
+import { parseAccountText } from './parseAccount';
 import { tokenizeLine, type AmountToken, type Token } from './tokenize';
 
 export interface ParsedTransaction {
@@ -23,6 +25,10 @@ export interface ParsedTransaction {
   foreign?: { currency: string; amountCents: number };
   cardLast4?: string;
   sourceLine: string;
+  /** Saldo após o lançamento (extratos de conta). */
+  balanceCents?: number;
+  /** Identificador do banco (OFX FITID). */
+  externalId?: string;
 }
 
 export interface ParsedStatement {
@@ -38,9 +44,17 @@ export interface ParsedStatement {
   unrecognizedLines: string[];
   skippedFutureCount: number;
   warnings: string[];
+  /** Fatura de cartão (padrão) ou extrato de conta corrente. */
+  accountType?: AccountType;
+  format?: 'pdf' | 'ofx' | 'csv';
+  periodStart?: string;
+  periodEnd?: string;
+  openingBalanceCents?: number;
+  closingBalanceCents?: number;
+  accountLabel?: string;
 }
 
-interface RawTx {
+export interface RawTx {
   day: number;
   month: number;
   year?: number;
@@ -148,7 +162,7 @@ export function extractFromTokens(tokens: Token[]): RawTx[] {
   return out;
 }
 
-function classify(normalized: string, cents: number): { kind: TxKind; cents: number } {
+export function classify(normalized: string, cents: number): { kind: TxKind; cents: number } {
   const abs = Math.abs(cents);
   if (PAYMENT_RE.test(normalized)) return { kind: 'pagamento', cents: -abs };
   if (cents < 0 || REFUND_RE.test(normalized)) return { kind: 'estorno', cents: -abs };
@@ -228,7 +242,22 @@ function buildTransaction(raw: RawTx, ctx: Context): ParsedTransaction | null {
 
 // ---------------------------------------------------------------- principal
 
-export function parseStatementText(lines: string[], opts: { today?: Date } = {}): ParsedStatement {
+/**
+ * Lê o texto de um PDF: decide se é fatura de cartão ou extrato de conta e
+ * usa o leitor correspondente. `forceType` permite corrigir a detecção.
+ */
+export function parseStatementText(
+  lines: string[],
+  opts: { today?: Date; forceType?: AccountType } = {},
+): ParsedStatement {
+  const fullText = lines.filter((l) => l !== BREAK_LINE).join('\n');
+  const type = opts.forceType ?? detectDocumentType(fullText);
+  if (type === 'conta') return parseAccountText(lines, opts);
+  return { ...parseCardText(lines, opts), accountType: 'cartao', format: 'pdf' };
+}
+
+/** Leitor de fatura de cartão de crédito. */
+export function parseCardText(lines: string[], opts: { today?: Date } = {}): ParsedStatement {
   const fullText = lines.filter((l) => l !== BREAK_LINE).join('\n');
   const issuer = detectIssuer(fullText);
   const dueDate = findDueDate(fullText);

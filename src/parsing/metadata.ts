@@ -120,3 +120,98 @@ export function findAnyFullDate(text: string): string | undefined {
   }
   return latest;
 }
+
+// ------------------------------------------------------------ conta corrente
+
+/**
+ * Fatura de cartão ou extrato de conta? Pontua expressões típicas de cada um.
+ * Empate fica com cartão (o formato mais comum aqui).
+ */
+export function detectDocumentType(text: string): 'cartao' | 'conta' {
+  const score = (pairs: Array<[RegExp, number]>) =>
+    pairs.reduce((acc, [re, w]) => acc + (re.test(text) ? w : 0), 0);
+  const conta = score([
+    [/\bextrato\b/i, 3],
+    [/conta[\s-]corrente|\bc\/c\b/i, 3],
+    [/saldo anterior/i, 2],
+    [/saldo (final|do dia|dispon[ií]vel|em conta|atual)/i, 2],
+    [/\bag[eê]ncia\b/i, 1],
+    [/hist[oó]rico/i, 1],
+    [/movimenta[çc][aã]o/i, 1],
+    [/pix recebido|transfer[eê]ncia recebida|ted recebida/i, 2],
+    [/total de entradas|total de sa[ií]das/i, 2],
+  ]);
+  const cartao = score([
+    [/\bfatura\b/i, 3],
+    [/vencimento/i, 2],
+    [/limite (total|de cr[eé]dito|dispon[ií]vel)/i, 2],
+    [/pagamento m[ií]nimo/i, 3],
+    [/total (desta|da) fatura/i, 2],
+    [/cart[aã]o de cr[eé]dito/i, 1],
+    [/melhor dia/i, 1],
+    [/pr[óo]ximas faturas/i, 1],
+  ]);
+  return conta > cartao ? 'conta' : 'cartao';
+}
+
+/** Período do extrato: "Período: 01/10/2026 a 31/10/2026", "01 OUT 2026 - 31 OUT 2026"... */
+export function findPeriod(text: string): { start?: string; end?: string } {
+  const num = new RegExp(`${NUM_DATE}\\s*(?:a|até|ate|à|-|–)\\s*${NUM_DATE}`, 'i');
+  const m = num.exec(text);
+  if (m?.[1] && m[2] && m[3] && m[4] && m[5] && m[6]) {
+    const start = toDate(m[1], m[2], m[3]);
+    const end = toDate(m[4], m[5], m[6]);
+    if (start && end && start <= end) return { start, end };
+  }
+  const txt = new RegExp(`${TXT_DATE}\\s*(?:a|até|ate|à|-|–)\\s*${TXT_DATE}`, 'i');
+  const t = txt.exec(text);
+  if (t?.[1] && t[2] && t[3] && t[4] && t[5] && t[6]) {
+    const start = toDate(t[1], t[2], t[3]);
+    const end = toDate(t[4], t[5], t[6]);
+    if (start && end && start <= end) return { start, end };
+  }
+  return {};
+}
+
+/** "Agência 1234 Conta 56789-0" → "Ag. 1234 · CC 56789-0". */
+export function findAccountLabel(text: string): string | undefined {
+  const m =
+    /ag[eê]ncia[:.\s]*(\d{3,5}(?:-\d)?)[^\n\d]{0,30}?conta(?:\s+corrente)?[:.\s]*(\d[\d.]{2,12}-?[\dxX]?)/i.exec(
+      text,
+    );
+  if (m?.[1] && m[2]) return `Ag. ${m[1]} · CC ${m[2]}`;
+  return undefined;
+}
+
+const BAL_AMOUNT = String.raw`(-?\s?(?:R\$)?\s?-?\s?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}\s?-?(?:\s?[CD](?=\s|$))?)`;
+
+function balanceCents(raw: string): number | undefined {
+  const cents = parseBRLToCents(raw);
+  if (cents === null) return undefined;
+  // Em saldos, "D" ou "-" indicam saldo negativo (devedor).
+  const negative = /-|\bD\s*$/.test(raw.trim());
+  return negative ? -Math.abs(cents) : Math.abs(cents);
+}
+
+/** Saldo anterior e saldo final impressos no extrato. */
+export function findBalances(text: string): { opening?: number; closing?: number } {
+  const out: { opening?: number; closing?: number } = {};
+  const opening = new RegExp(`saldo (?:anterior|inicial)[^\\n\\d-]{0,40}${BAL_AMOUNT}`, 'i').exec(
+    text,
+  );
+  if (opening?.[1]) {
+    const v = balanceCents(opening[1]);
+    if (v !== undefined) out.opening = v;
+  }
+  const closingRe = new RegExp(
+    `saldo (?:(?:final|atual|em conta|dispon[ií]vel|do per[ií]odo)(?:\\s+(?:em|de)\\s+\\d{2}\\/\\d{2}(?:\\/\\d{2,4})?)?|em \\d{2}\\/\\d{2}(?:\\/\\d{2,4})?)[^\\n\\d-]{0,40}${BAL_AMOUNT}`,
+    'gi',
+  );
+  let last: string | undefined;
+  for (const m of text.matchAll(closingRe)) last = m[1];
+  if (last) {
+    const v = balanceCents(last);
+    if (v !== undefined) out.closing = v;
+  }
+  return out;
+}

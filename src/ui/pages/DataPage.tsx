@@ -132,6 +132,22 @@ export function DataPage() {
     }
   };
 
+  const restoreStatement = useAppStore((s) => s.restoreStatement);
+  const removeWithUndo = (id: string) => {
+    const state = useAppStore.getState();
+    const statement = state.statements.find((x) => x.id === id);
+    if (!statement) return;
+    const txs = state.transactions.filter((t) => t.statementId === id);
+    removeStatement(id);
+    toast(
+      {
+        message: `${statement.accountType === 'conta' ? 'Extrato' : 'Fatura'} removido: ${txs.length} lançamentos.`,
+        action: { label: 'Desfazer', run: () => restoreStatement(statement, txs) },
+      },
+      8000,
+    );
+  };
+
   const sorted = [...statements].sort((a, b) => b.referenceMonth.localeCompare(a.referenceMonth));
 
   return (
@@ -220,9 +236,9 @@ export function DataPage() {
 
       <section className="panel" aria-labelledby="faturas-titulo">
         <div className="panel__head">
-          <h2 id="faturas-titulo">Faturas importadas</h2>
+          <h2 id="faturas-titulo">Documentos importados</h2>
           <p>
-            {statements.length} {statements.length === 1 ? 'fatura' : 'faturas'} ·{' '}
+            {statements.length} {statements.length === 1 ? 'documento' : 'documentos'} ·{' '}
             {transactions.length} lançamentos
           </p>
         </div>
@@ -244,7 +260,7 @@ export function DataPage() {
             <table className="ledger">
               <thead>
                 <tr>
-                  <th>Fatura</th>
+                  <th>Documento</th>
                   <th className="hide-narrow">Emissor</th>
                   <th className="right hide-narrow">Lanç.</th>
                   <th className="right">Total lido</th>
@@ -261,7 +277,9 @@ export function DataPage() {
                     <tr key={st.id}>
                       <td>
                         <strong style={{ fontWeight: 500 }}>
-                          {formatYearMonth(st.referenceMonth, 'long')}
+                          {st.accountType === 'conta'
+                            ? `Extrato · ${st.periodStart && st.periodEnd ? `${formatDateBR(st.periodStart)} a ${formatDateBR(st.periodEnd)}` : formatYearMonth(st.referenceMonth, 'long')}`
+                            : `Fatura · ${formatYearMonth(st.referenceMonth, 'long')}`}
                         </strong>
                         <div
                           className="muted"
@@ -269,6 +287,7 @@ export function DataPage() {
                         >
                           {st.fileName}
                           {st.dueDate ? ` · vence ${formatDateBR(st.dueDate)}` : ''}
+                          {st.origin === 'pasta' ? ' · pasta monitorada' : ''}
                         </div>
                       </td>
                       <td className="hide-narrow">
@@ -295,9 +314,9 @@ export function DataPage() {
                       <td className="right">
                         <ConfirmButton
                           className="icon-btn"
-                          ariaLabel={`Remover fatura de ${formatYearMonth(st.referenceMonth)}`}
+                          ariaLabel={`Remover ${st.accountType === 'conta' ? 'extrato' : 'fatura'} de ${formatYearMonth(st.referenceMonth)}`}
                           confirmLabel="Remover"
-                          onConfirm={() => removeStatement(st.id)}
+                          onConfirm={() => removeWithUndo(st.id)}
                         >
                           <Trash2 size={16} aria-hidden="true" />
                         </ConfirmButton>

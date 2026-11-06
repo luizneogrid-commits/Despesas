@@ -1,11 +1,18 @@
 import { addMonths, monthDiff } from '../domain/dates';
+import { scopeOf } from '../domain/categories';
 import type { Category, CategoryId, SpendGroup, Transaction } from '../domain/types';
 
 /** Lançamentos que contam como gasto: compras, encargos e estornos (negativos). */
+/**
+ * O que conta como gasto: compras, encargos e estornos (negativos) em
+ * categorias de gasto. Ficam de fora o pagamento da fatura, as entradas e as
+ * movimentações neutras (aplicações, resgates, entre contas próprias).
+ */
 export function isSpend(t: Transaction, categories: Map<CategoryId, Category>): boolean {
   if (t.excluded) return false;
-  if (t.kind === 'pagamento') return false;
-  return !categories.get(t.categoryId)?.hidden;
+  if (t.kind !== 'compra' && t.kind !== 'encargo' && t.kind !== 'estorno') return false;
+  const cat = categories.get(t.categoryId);
+  return !cat?.hidden && scopeOf(cat) === 'gasto';
 }
 
 export type PeriodKey = 'all' | 'last3' | 'last6' | 'last12' | `m:${string}`;

@@ -7,6 +7,8 @@ const KIND_LABEL: Record<TxKind, string> = {
   estorno: 'Estorno/crédito',
   pagamento: 'Pagamento',
   encargo: 'Encargo',
+  receita: 'Entrada',
+  transferencia: 'Movimentação neutra',
 };
 
 function csvCell(value: string): string {
@@ -35,6 +37,7 @@ export function transactionsToCSV(
     'Tipo',
     'Valor (R$)',
     'Parcela',
+    'Origem',
     'Cartão',
     'Internacional',
     'Mês da fatura',
@@ -53,6 +56,7 @@ export function transactionsToCSV(
         KIND_LABEL[t.kind],
         decimalBR(t.amountCents),
         t.installment ? `${t.installment.current}/${t.installment.total}` : '',
+        t.source === 'conta' ? 'conta' : 'cartão',
         t.cardLast4 ? `final ${t.cardLast4}` : '',
         t.international ? 'sim' : 'não',
         t.referenceMonth,

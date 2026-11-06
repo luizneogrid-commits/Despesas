@@ -1,13 +1,16 @@
 import { Eye, EyeOff, Globe, Search, SlidersHorizontal } from 'lucide-react';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useEffect, useDeferredValue, useMemo, useState } from 'react';
+import { isSpend, monthsForPeriod } from '../../analytics/aggregate';
 import { normalizeText } from '../../categorization/normalize';
-import { formatDayMonth, formatYearMonth } from '../../domain/dates';
-import { formatBRL } from '../../domain/money';
+import { formatDayMonth } from '../../domain/dates';
+import { formatBRL, formatMovement } from '../../domain/money';
 import type { Transaction, TxKind } from '../../domain/types';
 import { useAppStore } from '../../store/appStore';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { ContextFilters } from '../components/ContextFilters';
+import { FilterChips } from '../components/FilterChips';
 import { CategorySelect } from '../components/CategorySelect';
-import { useCategories } from '../useDashboard';
+import { useCategories, useFilterOptions } from '../useDashboard';
 import { EMPTY_TX_FILTER, useUiStore } from '../uiStore';
 
 const KIND_LABELS: Record<TxKind, string> = {
@@ -15,13 +18,14 @@ const KIND_LABELS: Record<TxKind, string> = {
   estorno: 'Estornos e créditos',
   pagamento: 'Pagamentos da fatura',
   encargo: 'Juros, IOF e tarifas',
+  receita: 'Entradas (conta)',
+  transferencia: 'Aplicações e transferências',
 };
 
 const PAGE = 120;
 
 export function TransactionsPage() {
   const transactions = useAppStore((s) => s.transactions);
-  const statements = useAppStore((s) => s.statements);
   const setCategory = useAppStore((s) => s.setCategory);
   const toggleExcluded = useAppStore((s) => s.toggleExcluded);
   const { list: categories, index } = useCategories();
@@ -30,29 +34,58 @@ export function TransactionsPage() {
   const toast = useUiStore((s) => s.toast);
   const [limit, setLimit] = useState(PAGE);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Atalho "/" para buscar (padrão de apps web), fora de campos de texto.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || el?.closest('input, select, textarea')) return;
+      e.preventDefault();
+      document.getElementById('busca-lancamentos')?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const query = useDeferredValue(filter.query);
 
-  const months = useMemo(
-    () => [...new Set(statements.map((s) => s.referenceMonth))].sort().reverse(),
-    [statements],
+  const period = useUiStore((s) => s.period);
+  const source = useUiStore((s) => s.source);
+  const card = useUiStore((s) => s.card);
+  const { months: available } = useFilterOptions();
+  const periodMonths = useMemo(
+    () => new Set(monthsForPeriod(period, available)),
+    [period, available],
   );
 
   const rows = useMemo(() => {
     const q = normalizeText(query);
     return transactions
       .filter((t) => {
+        if (!periodMonths.has(t.referenceMonth)) return false;
+        if (source === 'conta' ? t.source !== 'conta' : source === 'cartao' && t.source === 'conta')
+          return false;
+        if (card && t.cardLast4 !== card) return false;
         if (filter.categoryId && t.categoryId !== filter.categoryId) return false;
-        if (filter.month && t.referenceMonth !== filter.month) return false;
         if (filter.kind && t.kind !== filter.kind) return false;
         if (filter.onlyUnclassified && t.categoryId !== 'outros') return false;
         if (q && !normalizeText(`${t.description} ${t.merchantName}`).includes(q)) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-  }, [transactions, filter.categoryId, filter.month, filter.kind, filter.onlyUnclassified, query]);
+  }, [
+    transactions,
+    periodMonths,
+    source,
+    card,
+    filter.categoryId,
+    filter.kind,
+    filter.onlyUnclassified,
+    query,
+  ]);
 
-  const total = rows.reduce(
-    (a, t) => (t.excluded || t.kind === 'pagamento' ? a : a + t.amountCents),
+  const total = rows.reduce((a, t) => (isSpend(t, index) ? a + t.amountCents : a), 0);
+  const income = rows.reduce(
+    (a, t) => (t.kind === 'receita' && !t.excluded ? a - t.amountCents : a),
     0,
   );
   const unclassified = transactions.filter((t) => t.categoryId === 'outros').length;
@@ -86,13 +119,9 @@ export function TransactionsPage() {
     );
   };
 
-  const activeFilters = [filter.categoryId, filter.month, filter.kind].filter(Boolean).length;
+  const activeFilters = [filter.categoryId, filter.kind].filter(Boolean).length;
   const filtered =
-    filter.categoryId ||
-    filter.month ||
-    filter.kind ||
-    filter.onlyUnclassified ||
-    filter.query.trim().length > 0;
+    filter.categoryId || filter.kind || filter.onlyUnclassified || filter.query.trim().length > 0;
 
   return (
     <>
@@ -100,11 +129,13 @@ export function TransactionsPage() {
         <div>
           <h1>Lançamentos</h1>
           <p>
-            Revise as categorias: ao corrigir um lançamento, o app oferece aplicar a mesma categoria
-            ao estabelecimento inteiro e às próximas faturas.
+            Faturas do cartão e extratos da conta juntos. Ao corrigir uma categoria, o app oferece
+            salvar no de/para e aplicar nas próximas importações.
           </p>
         </div>
       </div>
+      <ContextFilters />
+      <FilterChips />
       <section className="panel" aria-label="Filtros dos lançamentos">
         <div className="toolbar">
           <label className="field field--wide">
@@ -120,7 +151,7 @@ export function TransactionsPage() {
                 className="input"
                 style={{ paddingLeft: 32 }}
                 type="search"
-                placeholder="Buscar estabelecimento"
+                placeholder="Buscar estabelecimento (atalho: /)"
                 value={filter.query}
                 onChange={(e) => setFilter({ query: e.target.value })}
               />
@@ -148,22 +179,6 @@ export function TransactionsPage() {
                 includeHidden
                 onChange={(categoryId) => setFilter({ categoryId })}
               />
-            </label>
-            <label className="field">
-              <span>Fatura</span>
-              <select
-                id="filtro-fatura"
-                className="select"
-                value={filter.month}
-                onChange={(e) => setFilter({ month: e.target.value })}
-              >
-                <option value="">Todas</option>
-                {months.map((m) => (
-                  <option key={m} value={m}>
-                    {formatYearMonth(m, 'long')}
-                  </option>
-                ))}
-              </select>
             </label>
             <label className="field">
               <span>Tipo</span>
@@ -211,7 +226,13 @@ export function TransactionsPage() {
             {rows.length} {rows.length === 1 ? 'lançamento' : 'lançamentos'}
           </h2>
           <p>
-            Soma (sem pagamentos): <span className="num">{formatBRL(total)}</span>
+            Gastos: <span className="num">{formatBRL(total)}</span>
+            {income > 0 && (
+              <>
+                {' '}
+                · Entradas: <span className="num">{formatBRL(income)}</span>
+              </>
+            )}
           </p>
         </div>
         {rows.length === 0 ? (
@@ -260,7 +281,13 @@ export function TransactionsPage() {
                       {t.kind === 'estorno' && <span className="chip chip--good">estorno</span>}
                       {t.kind === 'pagamento' && <span className="chip">pagamento</span>}
                       {t.kind === 'encargo' && <span className="chip chip--warn">encargo</span>}
-                      {t.cardLast4 && <span className="chip">final {t.cardLast4}</span>}
+                      {t.source === 'conta' ? (
+                        <span className="chip">conta</span>
+                      ) : (
+                        t.cardLast4 && <span className="chip">final {t.cardLast4}</span>
+                      )}
+                      {t.kind === 'receita' && <span className="chip chip--good">entrada</span>}
+                      {t.kind === 'transferencia' && <span className="chip">neutro</span>}
                       {t.categorySource === 'regra' && (
                         <span className="chip chip--carbon">de/para</span>
                       )}
@@ -274,12 +301,12 @@ export function TransactionsPage() {
                       label={`Categoria de ${t.description}`}
                       value={t.categoryId}
                       categories={categories}
-                      includeHidden={t.kind === 'pagamento'}
+                      scopes={credit ? ['receita', 'gasto', 'neutro'] : ['gasto', 'neutro']}
                       onChange={(id) => onCategory(t, id)}
                     />
                   </div>
                   <span className={`txrow__amount num${credit ? ' txrow__amount--credit' : ''}`}>
-                    {formatBRL(t.amountCents)}
+                    {formatMovement(t.amountCents)}
                   </span>
                   <span className="txrow__action">
                     <button

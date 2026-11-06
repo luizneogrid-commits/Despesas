@@ -1,5 +1,11 @@
 import {
+  ArrowDownLeft,
+  ArrowLeftRight,
   BadgeCheck,
+  Banknote,
+  Briefcase,
+  Send,
+  TrendingUp,
   Bike,
   CarTaxiFront,
   CircleHelp,
@@ -49,6 +55,12 @@ const ICONS: Record<string, LucideIcon> = {
   'circle-help': CircleHelp,
   'badge-check': BadgeCheck,
   tag: Tag,
+  send: Send,
+  banknote: Banknote,
+  briefcase: Briefcase,
+  'arrow-down-left': ArrowDownLeft,
+  'trending-up': TrendingUp,
+  'arrow-left-right': ArrowLeftRight,
 };
 
 export function CategoryIcon({

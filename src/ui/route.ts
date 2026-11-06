@@ -13,6 +13,16 @@ export const ROUTES = [
 const ALIASES: Record<string, Route> = { regras: 'de-para', categorias: 'de-para' };
 export type Route = (typeof ROUTES)[number];
 
+/** Mesmos nomes no computador e no celular. */
+export const ROUTE_LABELS: Record<Route, string> = {
+  'visao-geral': 'Início',
+  lancamentos: 'Lançamentos',
+  parcelas: 'Parcelas',
+  'de-para': 'De/para',
+  importar: 'Importar',
+  dados: 'Dados',
+};
+
 function current(): Route {
   const h = window.location.hash.replace(/^#/, '');
   if (ALIASES[h]) return ALIASES[h];

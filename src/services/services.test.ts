@@ -77,20 +77,29 @@ describe('regras do usuário', () => {
 });
 
 describe('dados de exemplo', () => {
-  it('gera 4 faturas coerentes e marcadas como exemplo', () => {
+  it('gera 4 faturas e 4 extratos coerentes, marcados como exemplo', () => {
     const demo = buildDemoState(new Date(2026, 10, 5));
-    expect(demo.statements.map((s) => s.referenceMonth)).toEqual([
+    const cards = demo.statements.filter((s) => s.accountType !== 'conta');
+    const accounts = demo.statements.filter((s) => s.accountType === 'conta');
+    expect(cards.map((s) => s.referenceMonth)).toEqual([
       '2026-08',
       '2026-09',
       '2026-10',
       '2026-11',
     ]);
+    expect(accounts).toHaveLength(4);
     expect(demo.statements.every((s) => s.isDemo)).toBe(true);
-    for (const st of demo.statements) {
+    for (const st of cards) {
       const sum = demo.transactions
         .filter((t) => t.statementId === st.id && t.kind !== 'pagamento')
         .reduce((a, t) => a + t.amountCents, 0);
       expect(sum).toBe(st.declaredTotalCents);
     }
+    for (const st of accounts) expect(reconcile(st).status).toBe('confere');
+    // O pagamento da fatura na conta é igual ao total da fatura do mês.
+    const nov = demo.transactions.find(
+      (t) => t.statementId === 'demo-conta-2026-11' && t.kind === 'pagamento',
+    );
+    expect(nov?.amountCents).toBe(cards.at(-1)?.declaredTotalCents);
   });
 });

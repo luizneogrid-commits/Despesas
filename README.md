@@ -1,10 +1,11 @@
 # Raio-X da Fatura
 
-Importe o **PDF da fatura do cartão de crédito** e veja para onde vai o seu dinheiro: gasto por categoria
-(supermercado, restaurantes, delivery, apps de mobilidade, streaming e mais 15), perfil
-essenciais × estilo de vida × custo do crédito, assinaturas recorrentes, parcelas a vencer e evolução mês a mês.
+Importe a **fatura do cartão de crédito** e o **extrato da conta corrente** (PDF, OFX ou CSV), ou deixe uma
+**pasta monitorada** importar sozinha cada arquivo novo, e veja para onde vai o seu dinheiro: gasto por categoria
+(supermercado, restaurantes, delivery, apps de mobilidade, streaming e mais 15), perfil essenciais × estilo de
+vida × custo do crédito, entradas e saídas da conta, assinaturas recorrentes, parcelas a vencer e evolução mês a mês.
 
-**Tudo roda no aparelho.** O PDF é lido localmente com pdf.js e nenhum dado da fatura é enviado a servidores.
+**Tudo roda no aparelho.** Os arquivos são lidos localmente e nenhum dado é enviado a servidores.
 
 **Abrir o app:** https://luizneogrid-commits.github.io/Despesas/ (funciona no celular e pode ser instalado na tela inicial).
 
@@ -12,18 +13,24 @@ essenciais × estilo de vida × custo do crédito, assinaturas recorrentes, parc
 
 ## Funcionalidades
 
-| Área                  | O que faz                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Importação de PDF** | Arrastar e soltar, vários meses de uma vez, PDFs com senha (a senha não é guardada), detecção de arquivo duplicado e de fatura reemitida, **conferência da soma lida com o total impresso**.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Leitura robusta**   | Datas `09 OUT`, `09/10` e `09/10/2026`; layouts de **uma ou duas colunas**; parcelas (`03/10`, `PARC 2/6`, `Parcela 2 de 6`); créditos (`-R$`, `45,90-`, `45,90 C`); cartões adicionais (`final 1234`, `•••• 1234`); compras internacionais e IOF; ignora o bloco de **"próximas faturas"**; infere o ano na virada (compra de dezembro na fatura de janeiro, parcela 11/12 do ano anterior).                                                                                                                                                                                                                  |
-| **Categorização**     | Base embutida com mais de 1.000 palavras-chave de estabelecimentos brasileiros, com marcas (iFood, Uber, 99, Netflix, Carrefour…). Remove intermediadores (`PAG*`, `MP*`, `PAYPAL *`, `EC *`). Plataformas de delivery vencem o nome do restaurante (`IFD*PIZZARIA` é delivery).                                                                                                                                                                                                                                                                                                                               |
-| **De/para**           | Tela com os estabelecimentos **não reconhecidos** (que caíram em "Outros"), agrupados, com prévia de quantos lançamentos cada texto reconhece. Você mapeia **de** "como aparece na fatura" **para** categoria e, se quiser, um nome amigável. O mapeamento recategoriza o que já foi importado e é **aplicado automaticamente nas próximas faturas** (inclusive na tela de revisão da importação, onde também dá para mapear antes de confirmar). Tipos: contém, começa com, exato e regex. Exportação/importação do de/para em CSV. Corrigir a categoria de um lançamento também oferece "Salvar no de/para". |
-| **Análises**          | Ranking de categorias com variação vs. período anterior, perfil por grupo, evolução por fatura com destaque da categoria, onde você mais gasta, assinaturas detectadas por recorrência, parcelas futuras por mês e destaques automáticos (comer fora, corridas por app, juros e IOF, gasto de fim de semana, itens sem categoria).                                                                                                                                                                                                                                                                             |
-| **Parcelas**          | Projeção do **valor já comprometido** com parcelas futuras: total a pagar, quanto a próxima fatura já começa devendo, média dos próximos 6 meses, gráfico/tabela mês a mês (opcionalmente somando assinaturas ativas), andamento de cada compra (já pago, falta, termina em) e "quando a fatura fica mais leve". A projeção parte da fatura mais recente **de cada emissor**, para não misturar cartões com meses diferentes.                                                                                                                                                                                  |
-| **Dados**             | Persistência local (IndexedDB), exportação CSV no padrão do Excel em português (`;`, vírgula decimal, BOM UTF-8, proteção contra injeção de fórmulas), backup/restauração em JSON, remoção por fatura ou total.                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Primeiro acesso**   | Abre com dados de exemplo (fictícios, sinalizados); a primeira fatura real os substitui. Há também um PDF de exemplo para testar a importação de ponta a ponta.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Área                          | O que faz                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Importação**                | PDF, **OFX/QFX** e **CSV**; arrastar e soltar, vários arquivos de uma vez, PDFs com senha (a senha não é guardada), detecção de arquivo duplicado e de fatura reemitida, **conferência automática** (fatura: soma × total impresso; extrato: saldo anterior + movimentações = saldo final).                                                                                                                                                                                                                                                                                                                    |
+| **Extrato de conta corrente** | Data só no primeiro lançamento do dia, descrição em duas linhas (destinatário do Pix), coluna de saldo, sinais `-`/`+`/`D`/`C` ou nenhum (deduzido pela variação do saldo). **Entradas** (salário, Pix recebido, rendimentos) não contam como gasto; **pagamento da fatura**, aplicações e resgates são neutros (não há contagem dupla com a fatura). Extratos sobrepostos não duplicam movimentações (por FITID no OFX ou data+valor+descrição).                                                                                                                                                              |
+| **Pasta monitorada**          | Chrome/Edge no computador: escolha a pasta uma vez; cada PDF/OFX/CSV salvo nela é lido e **importado sozinho** quando a leitura confere (ou fica na fila de revisão, conforme a preferência). Importa ou ignora o que já estava lá, detecta cópias, aceita senha padrão dos PDFs (opcional, guardada só se você pedir), registro de atividade e notificação do sistema.                                                                                                                                                                                                                                        |
+| **Leitura robusta**           | Datas `09 OUT`, `09/10` e `09/10/2026`; layouts de **uma ou duas colunas**; parcelas (`03/10`, `PARC 2/6`, `Parcela 2 de 6`); créditos (`-R$`, `45,90-`, `45,90 C`); cartões adicionais (`final 1234`, `•••• 1234`); compras internacionais e IOF; ignora o bloco de **"próximas faturas"**; infere o ano na virada (compra de dezembro na fatura de janeiro, parcela 11/12 do ano anterior).                                                                                                                                                                                                                  |
+| **Categorização**             | Base embutida com mais de 1.000 palavras-chave de estabelecimentos brasileiros, com marcas (iFood, Uber, 99, Netflix, Carrefour…). Remove intermediadores (`PAG*`, `MP*`, `PAYPAL *`, `EC *`). Plataformas de delivery vencem o nome do restaurante (`IFD*PIZZARIA` é delivery).                                                                                                                                                                                                                                                                                                                               |
+| **De/para**                   | Tela com os estabelecimentos **não reconhecidos** (que caíram em "Outros"), agrupados, com prévia de quantos lançamentos cada texto reconhece. Você mapeia **de** "como aparece na fatura" **para** categoria e, se quiser, um nome amigável. O mapeamento recategoriza o que já foi importado e é **aplicado automaticamente nas próximas faturas** (inclusive na tela de revisão da importação, onde também dá para mapear antes de confirmar). Tipos: contém, começa com, exato e regex. Exportação/importação do de/para em CSV. Corrigir a categoria de um lançamento também oferece "Salvar no de/para". |
+| **Análises**                  | Ranking de categorias com variação vs. período anterior, perfil por grupo, evolução por fatura com destaque da categoria, onde você mais gasta, assinaturas detectadas por recorrência, parcelas futuras por mês e destaques automáticos (comer fora, corridas por app, juros e IOF, gasto de fim de semana, itens sem categoria).                                                                                                                                                                                                                                                                             |
+| **Parcelas**                  | Projeção do **valor já comprometido** com parcelas futuras: total a pagar, quanto a próxima fatura já começa devendo, média dos próximos 6 meses, gráfico/tabela mês a mês (opcionalmente somando assinaturas ativas), andamento de cada compra (já pago, falta, termina em) e "quando a fatura fica mais leve". A projeção parte da fatura mais recente **de cada emissor**, para não misturar cartões com meses diferentes.                                                                                                                                                                                  |
+| **Dados**                     | Persistência local (IndexedDB), exportação CSV no padrão do Excel em português (`;`, vírgula decimal, BOM UTF-8, proteção contra injeção de fórmulas), backup/restauração em JSON, remoção por fatura ou total.                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Primeiro acesso**           | Abre com dados de exemplo (fictícios, sinalizados); a primeira fatura real os substitui. Há também um PDF de exemplo para testar a importação de ponta a ponta.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ![Importação](docs/importacao.png)
+
+![Entradas e saídas da conta](docs/conta-corrente.png)
+
+![Pasta monitorada](docs/pasta-monitorada.png)
 
 ![De/para](docs/de-para.png)
 
@@ -111,14 +118,16 @@ src/
 │   ├── extract.ts      itens de texto posicionados por página
 │   ├── lines.ts        reconstrói linhas e detecta layout em duas colunas
 │   ├── tokenize.ts     DATA / VALOR / TEXTO
-│   ├── parseStatement.ts  máquina de estados, seções, parcelas, ano, tipo
-│   └── metadata.ts     emissor, vencimento, fechamento, total declarado
+│   ├── parseStatement.ts  fatura: máquina de estados, seções, parcelas, ano, tipo
+│   ├── parseAccount.ts    extrato de conta: data do dia, continuação, saldo, sinal
+│   ├── ofx.ts / csvStatement.ts  OFX (SGML/XML, conta e cartão) e CSV por cabeçalho
+│   └── metadata.ts     emissor, tipo de documento, vencimento, período, saldos, total
 ├── categorization/   normalização, base embutida e motor de regras
 ├── analytics/        agregações, assinaturas, projeção de parcelas e compromissos, destaques
 ├── services/         importação (rascunho → revisão), de/para, exportação, dados de exemplo
 ├── storage/          IndexedDB com migração de schema e fallback em memória
 ├── store/            estado global (Zustand) e persistência com debounce
-├── pwa/              service worker, instalação e arquivos recebidos (Compartilhar / abrir com)
+├── pwa/              service worker, instalação, arquivos recebidos e pasta monitorada
 └── ui/               páginas, gráficos SVG próprios e componentes
 ```
 
@@ -158,6 +167,15 @@ src/
 - **Qualidade**: TypeScript estrito (`noUncheckedIndexedAccess`), ESLint, Prettier, CI no GitHub Actions,
   testes unitários e **testes de integração com PDFs reais** (fictícios) em três layouts.
 
+## Navegação e UX
+
+A navegação foi revisada numa avaliação heurística (Nielsen + padrões mobile + WCAG de navegação), registrada em
+[`docs/avaliacao-ux.md`](docs/avaliacao-ux.md). Em resumo: barra inferior com no máximo cinco abas e "Mais";
+painel **Precisa da sua atenção** no Início; **filtros globais** (período, origem cartão/conta, cartão)
+compartilhados entre as telas; chips dos filtros ativos com **Voltar**; estabelecimentos e meses clicáveis;
+título da aba e foco atualizados a cada tela, "Pular para o conteúdo", atalho **/** para buscar e **Desfazer**
+ao remover um documento.
+
 ## Como estender
 
 ### Ensinar um novo estabelecimento
@@ -185,10 +203,14 @@ para diagnosticar um banco novo.
 - Em compras internacionais com colunas em reais e dólar, assume-se que o último valor da linha é o valor
   em reais.
 - Os dados ficam no navegador: limpar os dados do site apaga tudo. Use o backup.
+- A **pasta monitorada** depende da File System Access API: funciona no Chrome e no Edge do computador, só
+  enquanto o app está aberto (aba ou instalado), e o navegador pode pedir para confirmar o acesso a cada visita.
+  No celular, use o Compartilhar (Android) ou o botão Importar.
+- Em extratos em PDF sem sinal e sem coluna de saldo, entrada/saída é deduzida pela descrição; a revisão avisa
+  quantas movimentações estão nessa situação. OFX é o formato mais preciso para conta corrente.
 
 ## Próximos passos sugeridos
 
-- Importar também OFX/CSV exportados pelo banco.
 - Orçamento mensal por categoria com alertas.
 - Publicar nas lojas (Google Play via TWA/Bubblewrap ou Capacitor; App Store via Capacitor).
 - Sincronização opcional criptografada ponta a ponta entre dispositivos.

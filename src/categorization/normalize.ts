@@ -58,6 +58,36 @@ const NOISE_TOKENS = new Set([
   'DO',
   'DA',
   'DE',
+  // Operações de conta corrente: o que identifica é quem recebeu ou cobrou.
+  'PIX',
+  'ENVIADO',
+  'ENVIADA',
+  'RECEBIDO',
+  'RECEBIDA',
+  'PELO',
+  'TRANSF',
+  'TRANSFERENCIA',
+  'TED',
+  'DOC',
+  'TEV',
+  'QR',
+  'QRS',
+  'PAGTO',
+  'PGTO',
+  'PAG',
+  'BOLETO',
+  'TITULO',
+  'DEBITO',
+  'DEB',
+  'AUT',
+  'AUTOMATICO',
+  'CARTAO',
+  'ELO',
+  'VISA',
+  'MASTERCARD',
+  'MAESTRO',
+  'NO',
+  'EM',
 ]);
 
 /**
@@ -129,8 +159,16 @@ export function prettifyDescription(description: string): string {
 }
 
 /** Nome de exibição de um estabelecimento sem marca conhecida. */
+/** Operações de conta que antecedem o nome de quem recebeu/cobrou. */
+const OPERATION_PREFIX =
+  /^(?:(?:PIX|TED|DOC|TEV)\s+(?:ENVIADO|ENVIADA|RECEBIDO|RECEBIDA|ENV|TRANSF|QRS?)?|TRANSF(?:ERENCIA)?\s+(?:ENVIADA|RECEBIDA)(?:\s+PELO\s+PIX)?|TRANSF(?:ERENCIA)?\s+PIX|COMPRA\s+(?:CARTAO\s+)?(?:DEB(?:ITO)?|ELO\s+DEBITO|NO\s+DEBITO)|COMPRA\s+COM\s+CARTAO|PAG(?:AMENTO|TO)?\s+(?:DE\s+)?BOLETO|DEB(?:ITO)?\s+AUT(?:OMATICO)?)\s*[-–:]?\s*/i;
+
 export function displayMerchant(description: string): string {
-  const base = stripAcquirer(description)
+  // Casa sem acentos ("Transferência") e corta o texto original no mesmo ponto.
+  const nfc = description.normalize('NFC');
+  const op = OPERATION_PREFIX.exec(stripAccents(nfc));
+  const withoutOp = op ? nfc.slice(op[0].length) : nfc;
+  const base = stripAcquirer(withoutOp.length >= 3 ? withoutOp : description)
     .replace(/\bPARC(?:ELA)?\.?\s*\d{1,2}\s*(?:\/|DE)\s*\d{1,2}\b/gi, ' ')
     .replace(/[\s*#-]+\d[\d\s./-]*$/, '')
     .replace(/\s+/g, ' ')

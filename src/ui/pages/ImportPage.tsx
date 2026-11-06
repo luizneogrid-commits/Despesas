@@ -9,9 +9,10 @@ import {
   Upload,
 } from 'lucide-react';
 import { useMemo, useState, type DragEvent } from 'react';
+import type { AccountType } from '../../domain/types';
 import { installmentOutlook } from '../../analytics/installments';
 import { addMonths, formatDateBR, formatYearMonth } from '../../domain/dates';
-import { formatBRL } from '../../domain/money';
+import { formatBRL, formatMovement } from '../../domain/money';
 import {
   findConflicts,
   reconcile,
@@ -21,6 +22,7 @@ import {
 import { pendingMerchants } from '../../services/mappings';
 import { recategorize, useAppStore } from '../../store/appStore';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { FolderPanel } from '../components/FolderPanel';
 import { MappingRow } from '../components/MappingRow';
 import { emptyDraft, type MappingDraft } from '../mappingDraft';
 import { addFiles, processItem, useQueue, type QueueItem } from '../importQueue';
@@ -49,7 +51,7 @@ function Dropzone() {
         id="arquivo-fatura"
         className="visually-hidden"
         type="file"
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,.ofx,.qfx,.csv,text/csv"
         multiple
         onChange={(e) => {
           addFiles([...(e.target.files ?? [])]);
@@ -60,12 +62,13 @@ function Dropzone() {
         <Upload size={24} />
       </span>
       <h2>
-        <span className="only-mouse">Arraste o PDF da fatura ou clique para escolher</span>
-        <span className="only-touch">Toque para escolher o PDF da fatura</span>
+        <span className="only-mouse">Arraste a fatura ou o extrato, ou clique para escolher</span>
+        <span className="only-touch">Toque para escolher a fatura ou o extrato</span>
       </h2>
       <p>
-        Funciona com a fatura em PDF baixada do app ou do site do banco (Nubank, Itaú, Bradesco,
-        Santander, Inter, C6, BB, Caixa e outros). Dá para enviar vários meses de uma vez.
+        Fatura do cartão ou extrato da conta corrente, em PDF, OFX ou CSV, baixados do app ou do
+        site do banco (Nubank, Itaú, Bradesco, Santander, Inter, C6, BB, Caixa e outros). Dá para
+        enviar vários meses de uma vez.
         <span className="only-touch">
           {' '}
           No Android, com o app instalado, você também pode abrir o PDF no app do banco e usar
@@ -87,7 +90,7 @@ function PasswordForm({ item }: { item: QueueItem }) {
       className="receipt__body"
       onSubmit={(e) => {
         e.preventDefault();
-        if (password) void processItem(item, password);
+        if (password) void processItem(item, { password });
       }}
     >
       <div className={`notice${item.wrongPassword ? ' notice--bad' : ''}`}>
@@ -137,6 +140,7 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
   const setPeriod = useUiStore((s) => s.setPeriod);
   const [showAll, setShowAll] = useState(false);
   const st = draft.statement;
+  const isAccount = st.accountType === 'conta';
   // O de/para atual (inclusive o criado nesta tela) já se aplica ao rascunho.
   const txs = useMemo(
     () => recategorize(draft.transactions, rules, customCategories),
@@ -181,7 +185,9 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
     remove(item.id);
     setPeriod('all');
     toast({
-      message: `Fatura de ${formatYearMonth(st.referenceMonth)} importada: ${draft.transactions.length} lançamentos.`,
+      message: isAccount
+        ? `Extrato importado: ${draft.transactions.length} movimentações novas.`
+        : `Fatura de ${formatYearMonth(st.referenceMonth)} importada: ${draft.transactions.length} lançamentos.`,
       action: { label: 'Ver visão geral', run: () => navigate('visao-geral') },
     });
   };
@@ -193,58 +199,126 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
       <div className="receipt__body">
         <dl className="facts">
           <div className="fact">
-            <dt>Mês da fatura</dt>
+            <dt>Tipo de documento</dt>
             <dd>
               <select
-                id={`mes-${item.id}`}
+                id={`tipo-${item.id}`}
                 className="select"
-                aria-label="Mês de referência da fatura"
-                value={st.referenceMonth}
+                aria-label="Tipo de documento"
+                value={isAccount ? 'conta' : 'cartao'}
                 onChange={(e) =>
-                  upsert({ ...item, draft: withReferenceMonth(draft, e.target.value) })
+                  void processItem(item, { forceType: e.target.value as AccountType })
                 }
               >
-                {monthOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {formatYearMonth(m, 'long')}
-                  </option>
-                ))}
+                <option value="cartao">Fatura de cartão</option>
+                <option value="conta">Extrato de conta</option>
               </select>
             </dd>
           </div>
-          <div className="fact">
-            <dt>Vencimento</dt>
-            <dd>{st.dueDate ? formatDateBR(st.dueDate) : 'não encontrado'}</dd>
-          </div>
-          <div className="fact">
-            <dt>Lançamentos lidos</dt>
-            <dd>{draft.transactions.length}</dd>
-          </div>
-          <div className="fact">
-            <dt>Soma dos lançamentos</dt>
-            <dd className="num">{formatBRL(st.parsedTotalCents)}</dd>
-          </div>
-          <div className="fact">
-            <dt>Total impresso na fatura</dt>
-            <dd className="num">
-              {st.declaredTotalCents !== undefined ? formatBRL(st.declaredTotalCents) : '—'}
-            </dd>
-          </div>
+          {isAccount ? (
+            <>
+              <div className="fact">
+                <dt>Período</dt>
+                <dd>
+                  {st.periodStart && st.periodEnd
+                    ? `${formatDateBR(st.periodStart)} a ${formatDateBR(st.periodEnd)}`
+                    : 'não informado'}
+                </dd>
+              </div>
+              {st.accountLabel && (
+                <div className="fact">
+                  <dt>Conta</dt>
+                  <dd>{st.accountLabel}</dd>
+                </div>
+              )}
+              <div className="fact">
+                <dt>Movimentações novas</dt>
+                <dd>{draft.transactions.length}</dd>
+              </div>
+              <div className="fact">
+                <dt>Saldo anterior → final</dt>
+                <dd className="num">
+                  {st.openingBalanceCents !== undefined ? formatBRL(st.openingBalanceCents) : '—'} →{' '}
+                  {st.closingBalanceCents !== undefined ? formatBRL(st.closingBalanceCents) : '—'}
+                </dd>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="fact">
+                <dt>Mês da fatura</dt>
+                <dd>
+                  <select
+                    id={`mes-${item.id}`}
+                    className="select"
+                    aria-label="Mês de referência da fatura"
+                    value={st.referenceMonth}
+                    onChange={(e) =>
+                      upsert({ ...item, draft: withReferenceMonth(draft, e.target.value) })
+                    }
+                  >
+                    {monthOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {formatYearMonth(m, 'long')}
+                      </option>
+                    ))}
+                  </select>
+                </dd>
+              </div>
+              <div className="fact">
+                <dt>Vencimento</dt>
+                <dd>{st.dueDate ? formatDateBR(st.dueDate) : 'não encontrado'}</dd>
+              </div>
+              <div className="fact">
+                <dt>Lançamentos lidos</dt>
+                <dd>{draft.transactions.length}</dd>
+              </div>
+              <div className="fact">
+                <dt>Soma × total impresso</dt>
+                <dd className="num">
+                  {formatBRL(st.parsedTotalCents)} ×{' '}
+                  {st.declaredTotalCents !== undefined ? formatBRL(st.declaredTotalCents) : '—'}
+                </dd>
+              </div>
+            </>
+          )}
         </dl>
 
+        {item.reviewReason && (
+          <div className="notice notice--warn">
+            <CircleAlert size={16} aria-hidden="true" />
+            <span>Chegou pela pasta monitorada e parou para revisão: {item.reviewReason}.</span>
+          </div>
+        )}
         {rec.status === 'confere' && (
           <div className="notice notice--good">
             <CircleCheck size={16} aria-hidden="true" />
-            <span>A soma dos lançamentos confere com o total da fatura.</span>
+            <span>
+              {isAccount
+                ? 'Saldo anterior + movimentações = saldo final. A leitura confere.'
+                : 'A soma dos lançamentos confere com o total da fatura.'}
+            </span>
           </div>
         )}
         {rec.status === 'diferente' && (
           <div className="notice notice--warn">
             <CircleAlert size={16} aria-hidden="true" />
             <span>
-              Diferença de {formatBRL(Math.abs(rec.diffCents))} para o total impresso. Pode ser
-              saldo anterior, juros do rotativo ou lançamentos que não reconhecemos — confira abaixo
-              antes de importar.
+              {isAccount
+                ? `O saldo não fecha por ${formatBRL(Math.abs(rec.diffCents))}. Alguma movimentação pode não ter sido reconhecida ou ter o sinal trocado: confira abaixo.`
+                : `Diferença de ${formatBRL(Math.abs(rec.diffCents))} para o total impresso. Pode ser saldo anterior, juros do rotativo ou lançamentos que não reconhecemos: confira abaixo antes de importar.`}
+            </span>
+          </div>
+        )}
+        {(st.skippedDuplicates ?? 0) > 0 && (
+          <div className="notice">
+            <Info size={16} aria-hidden="true" />
+            <span>
+              {st.skippedDuplicates}{' '}
+              {st.skippedDuplicates === 1
+                ? 'movimentação já estava importada'
+                : 'movimentações já estavam importadas'}{' '}
+              de outro extrato e {st.skippedDuplicates === 1 ? 'foi ignorada' : 'foram ignoradas'}.
             </span>
           </div>
         )}
@@ -380,7 +454,7 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
                       )}
                     </td>
                     <td>{index.get(t.categoryId)?.name}</td>
-                    <td className="right num">{formatBRL(t.amountCents)}</td>
+                    <td className="right num">{formatMovement(t.amountCents)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -449,7 +523,9 @@ function QueueCard({ item }: { item: QueueItem }) {
           <div style={{ minWidth: 0 }}>
             <h2 style={{ overflowWrap: 'anywhere' }}>
               {st
-                ? `${st.issuerName} · ${formatYearMonth(st.referenceMonth, 'long')}`
+                ? st.accountType === 'conta'
+                  ? `Extrato ${st.issuerName}${st.periodEnd ? ` · até ${formatDateBR(st.periodEnd)}` : ''}`
+                  : `Fatura ${st.issuerName} · ${formatYearMonth(st.referenceMonth, 'long')}`
                 : item.file.name}
             </h2>
             <p className="muted" style={{ fontSize: 'var(--text-xs)', overflowWrap: 'anywhere' }}>
@@ -459,7 +535,8 @@ function QueueCard({ item }: { item: QueueItem }) {
           </div>
         </div>
         {item.status === 'revisao' && <span className="chip chip--carbon">Revise e confirme</span>}
-        {item.status === 'lendo' && <span className="chip">Lendo o PDF…</span>}
+        {item.origin === 'pasta' && <span className="chip">pasta monitorada</span>}
+        {item.status === 'lendo' && <span className="chip">Lendo o arquivo…</span>}
         {item.status === 'senha' && <span className="chip chip--warn">Protegido por senha</span>}
         {item.status === 'erro' && <span className="chip chip--bad">Não foi possível ler</span>}
       </header>
@@ -501,7 +578,9 @@ export function ImportPage() {
       const res = await fetch(`${import.meta.env.BASE_URL}exemplo-fatura.pdf`);
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
-      addFiles([new File([blob], 'fatura-exemplo.pdf', { type: 'application/pdf' })], true);
+      addFiles([new File([blob], 'fatura-exemplo.pdf', { type: 'application/pdf' })], {
+        example: true,
+      });
     } catch {
       toast({ message: 'Não foi possível carregar a fatura de exemplo.', tone: 'erro' });
     } finally {
@@ -513,10 +592,10 @@ export function ImportPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Importar fatura</h1>
+          <h1>Importar faturas e extratos</h1>
           <p>
-            Envie o PDF, confira o que foi lido e confirme. As categorias são sugeridas
-            automaticamente e você pode ajustá-las depois.
+            Envie o arquivo ou monitore uma pasta. Confira o que foi lido e confirme: as categorias
+            são sugeridas e você ajusta depois.
           </p>
         </div>
         <button
@@ -528,10 +607,18 @@ export function ImportPage() {
           <FileText size={16} aria-hidden="true" /> Testar com uma fatura de exemplo
         </button>
       </div>
+      {items.length > 0 && (
+        <section className="stack" aria-labelledby="fila-titulo" style={{ gap: 12 }}>
+          <h2 id="fila-titulo" className="section-title">
+            Para revisar <span className="count-badge">{items.length}</span>
+          </h2>
+          {items.map((item) => (
+            <QueueCard key={item.id} item={item} />
+          ))}
+        </section>
+      )}
       <Dropzone />
-      {items.map((item) => (
-        <QueueCard key={item.id} item={item} />
-      ))}
+      <FolderPanel />
       <section className="panel" aria-labelledby="dicas-titulo">
         <div className="panel__head">
           <h2 id="dicas-titulo">Dicas para uma boa leitura</h2>
@@ -546,14 +633,18 @@ export function ImportPage() {
             gap: 6,
           }}
         >
-          <li>Use o PDF original do banco. Fotos ou PDFs escaneados não têm texto para ler.</li>
+          <li>
+            Use o PDF original do banco ou o OFX/CSV exportado (o OFX costuma ser o mais preciso
+            para extratos). Fotos ou PDFs escaneados não têm texto para ler.
+          </li>
           <li>Faturas com senha abrem aqui mesmo: a senha não é guardada.</li>
           <li>
             Parcelas listadas em "próximas faturas" são ignoradas; entram apenas no mês em que são
             cobradas.
           </li>
           <li>
-            Pagamentos da fatura não contam como gasto. Estornos abatem a categoria da compra
+            No extrato, o pagamento da fatura, as aplicações e os resgates não contam como gasto (as
+            compras do cartão já entram pela fatura). Estornos abatem a categoria da compra
             original.
           </li>
           <li>

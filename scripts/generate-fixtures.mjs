@@ -220,6 +220,102 @@ async function table() {
   return { bytes: await doc.save(), total, count: counted.length + 1 };
 }
 
+// ------------------------------------------------------------ 4. extrato de conta (PDF)
+// Data só no primeiro lançamento do dia, descrição em duas linhas, valores SEM
+// sinal e coluna de saldo: o leitor deduz entrada/saída pela variação do saldo.
+async function accountStatement() {
+  const { doc, font, bold } = await makeDoc();
+  const page = doc.addPage([595, 842]);
+  const w = writer(page, font);
+  const opening = 200000;
+  const rows = [
+    ['01/10', 'PIX RECEBIDO EMPRESA EXEMPLO LTDA', 850000, null],
+    [null, 'PIX ENVIADO', -220000, 'MARIA DA SILVA - •••.456.789-•• - BCO EXEMPLO'],
+    ['03/10', 'COMPRA CARTAO DEBITO PADARIA REAL', -2350, null],
+    [null, 'PAGAMENTO DE BOLETO ENEL SP', -18990, null],
+    ['10/10', 'PAGAMENTO FATURA CARTAO', -282393, null],
+    ['12/10', 'APLICACAO CDB', -100000, null],
+    ['15/10', 'SAQUE BANCO24HORAS', -20000, null],
+    ['20/10', 'TAR PACOTE SERVICOS', -3290, null],
+    ['25/10', 'ESTORNO COMPRA LOJA X', 4590, null],
+    ['31/10', 'RENDIMENTO POUPANCA', 1234, null],
+    [null, 'PIX ENVIADO', -15000, 'JOAO PEDREIRO'],
+  ];
+  let bal = opening;
+  w.text('Banco Exemplo S.A. · Extrato de conta corrente (DADOS FICTÍCIOS)', 40, 800, 11, bold);
+  w.text('Cliente: ANA EXEMPLO     Agência 1234   Conta 56789-0', 40, 782);
+  w.text('Período: 01/10/2026 a 31/10/2026', 40, 766);
+  w.text('Data', 40, 740, 9, bold);
+  w.text('Histórico', 100, 740, 9, bold);
+  w.right('Valor (R$)', 470, 740, 9, bold);
+  w.right('Saldo (R$)', 555, 740, 9, bold);
+  let y = 722;
+  w.text('SALDO ANTERIOR', 100, y);
+  w.right(brl(opening), 555, y);
+  y -= 16;
+  for (const [date, desc, cents, cont] of rows) {
+    bal += cents;
+    if (date) w.text(date, 40, y);
+    w.text(desc, 100, y);
+    w.right(brl(Math.abs(cents)), 470, y);
+    w.right(brl(bal), 555, y);
+    y -= 14;
+    if (cont) {
+      w.text(cont, 100, y, 8);
+      y -= 14;
+    }
+    y -= 2;
+  }
+  w.text(`Saldo final em 31/10/2026 ${brl(bal)}`, 40, y - 10, 10, bold);
+  const net = bal - opening;
+  return { bytes: await doc.save(), total: net, count: rows.length, closing: bal };
+}
+
+const account = await accountStatement();
+writeFileSync(resolve(fixturesDir, 'extrato-conta.pdf'), account.bytes);
+console.log(
+  `[fixtures] extrato-conta.pdf: ${account.count} movimentações · saldo final ${brl(account.closing)}`,
+);
+
+// ------------------------------------------------------------ 5. OFX e 6. CSV
+const ofx = `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0<SEVERITY>INFO</STATUS><DTSERVER>20261101120000[-3:BRT]<LANGUAGE>POR</SONRS></SIGNONMSGSRSV1>
+<BANKMSGSRSV1><STMTTRNRS><TRNUID>1<STATUS><CODE>0<SEVERITY>INFO</STATUS>
+<STMTRS><CURDEF>BRL
+<BANKACCTFROM><BANKID>0341<BRANCHID>1234<ACCTID>56789-0<ACCTTYPE>CHECKING</BANKACCTFROM>
+<BANKTRANLIST><DTSTART>20261001000000[-3:BRT]<DTEND>20261031000000[-3:BRT]
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261005000000[-3:BRT]<TRNAMT>7500.00<FITID>A1<MEMO>SALARIO EMPRESA EXEMPLO</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261006000000[-3:BRT]<TRNAMT>-89.90<FITID>A2<MEMO>COMPRA CARTAO DEB DROGASIL</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261008000000[-3:BRT]<TRNAMT>-1500.00<FITID>A3<MEMO>PAGTO FATURA CARTAO</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261010000000[-3:BRT]<TRNAMT>-2000.00<FITID>A4<MEMO>PIX ENVIADO JOS\xc9 ALUGUEL</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261015000000[-3:BRT]<TRNAMT>-500.00<FITID>A5<MEMO>APLICACAO RENDE FACIL</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261020000000[-3:BRT]<TRNAMT>120.00<FITID>A6<MEMO>PIX RECEBIDO CARLA</STMTTRN>
+</BANKTRANLIST>
+<LEDGERBAL><BALAMT>4630.10<DTASOF>20261031000000[-3:BRT]</LEDGERBAL>
+</STMTRS></STMTTRNRS></BANKMSGSRSV1>
+</OFX>
+`;
+writeFileSync(resolve(fixturesDir, 'extrato-conta.ofx'), Buffer.from(ofx, 'latin1'));
+const csv = `Data,Valor,Identificador,Descrição
+01/11/2026,"8.500,00",f1,Transferência recebida pelo Pix - EMPRESA EXEMPLO
+03/11/2026,"-23,50",f2,Compra no débito - PADARIA REAL
+05/11/2026,"-1.881,04",f3,Pagamento de fatura
+07/11/2026,"-150,00",f4,Transferência enviada pelo Pix - JOAO PEDREIRO
+10/11/2026,"-300,00",f5,Aplicação RDB
+`;
+writeFileSync(resolve(fixturesDir, 'extrato-conta.csv'), csv);
+console.log('[fixtures] extrato-conta.ofx, extrato-conta.csv');
+
 const outputs = {
   'fatura-coluna-unica.pdf': await singleColumn(),
   'fatura-duas-colunas.pdf': await twoColumns(),

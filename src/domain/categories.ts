@@ -1,120 +1,89 @@
-import type { Category, CategoryId, SpendGroup } from './types';
+import type { Category, CategoryId, CategoryScope, SpendGroup } from './types';
+
+type Def = [id: CategoryId, name: string, group: SpendGroup, icon: string, hidden?: boolean];
 
 /**
  * Categorias padrão. A ordem aqui é a ordem de exibição em listas e seletores.
  * `icon` referencia um ícone do lucide (mapeado em ui/components/CategoryIcon).
  */
-export const BUILTIN_CATEGORIES: Category[] = [
-  {
-    id: 'supermercado',
-    name: 'Supermercado',
-    group: 'essencial',
-    icon: 'shopping-cart',
-    builtIn: true,
-  },
-  {
-    id: 'restaurantes',
-    name: 'Restaurantes, bares e cafés',
-    group: 'estilo',
-    icon: 'utensils',
-    builtIn: true,
-  },
-  { id: 'delivery', name: 'Delivery de comida', group: 'estilo', icon: 'bike', builtIn: true },
-  {
-    id: 'mobilidade',
-    name: 'Apps de mobilidade',
-    group: 'essencial',
-    icon: 'car-taxi',
-    builtIn: true,
-  },
-  {
-    id: 'transporte',
-    name: 'Transporte e veículo',
-    group: 'essencial',
-    icon: 'fuel',
-    builtIn: true,
-  },
-  { id: 'streaming', name: 'Streaming', group: 'estilo', icon: 'tv', builtIn: true },
-  {
-    id: 'assinaturas',
-    name: 'Apps e assinaturas digitais',
-    group: 'estilo',
-    icon: 'repeat',
-    builtIn: true,
-  },
-  {
-    id: 'compras',
-    name: 'Compras online e lojas',
-    group: 'estilo',
-    icon: 'package',
-    builtIn: true,
-  },
-  { id: 'vestuario', name: 'Roupas e acessórios', group: 'estilo', icon: 'shirt', builtIn: true },
-  { id: 'saude', name: 'Saúde e farmácia', group: 'essencial', icon: 'heart-pulse', builtIn: true },
-  { id: 'casa', name: 'Casa e contas', group: 'essencial', icon: 'home', builtIn: true },
-  {
-    id: 'educacao',
-    name: 'Educação e livros',
-    group: 'essencial',
-    icon: 'graduation-cap',
-    builtIn: true,
-  },
-  { id: 'lazer', name: 'Lazer e entretenimento', group: 'estilo', icon: 'ticket', builtIn: true },
-  { id: 'viagem', name: 'Viagens e hospedagem', group: 'estilo', icon: 'plane', builtIn: true },
-  { id: 'academia', name: 'Academia e esportes', group: 'estilo', icon: 'dumbbell', builtIn: true },
-  {
-    id: 'beleza',
-    name: 'Beleza e cuidados pessoais',
-    group: 'estilo',
-    icon: 'sparkles',
-    builtIn: true,
-  },
-  { id: 'pets', name: 'Pets', group: 'essencial', icon: 'paw-print', builtIn: true },
-  { id: 'apostas', name: 'Apostas e jogos de azar', group: 'estilo', icon: 'dices', builtIn: true },
-  {
-    id: 'servicos',
-    name: 'Serviços e profissionais',
-    group: 'essencial',
-    icon: 'wrench',
-    builtIn: true,
-  },
-  {
-    id: 'tarifas',
-    name: 'Juros, IOF e tarifas',
-    group: 'financeiro',
-    icon: 'percent',
-    builtIn: true,
-  },
-  { id: 'outros', name: 'Outros', group: 'outros', icon: 'circle-help', builtIn: true },
-  {
-    id: 'pagamentos',
-    name: 'Pagamentos da fatura',
-    group: 'outros',
-    icon: 'badge-check',
-    builtIn: true,
-    hidden: true,
-  },
+const DEFS: Def[] = [
+  ['supermercado', 'Supermercado', 'essencial', 'shopping-cart'],
+  ['restaurantes', 'Restaurantes, bares e cafés', 'estilo', 'utensils'],
+  ['delivery', 'Delivery de comida', 'estilo', 'bike'],
+  ['mobilidade', 'Apps de mobilidade', 'essencial', 'car-taxi'],
+  ['transporte', 'Transporte e veículo', 'essencial', 'fuel'],
+  ['streaming', 'Streaming', 'estilo', 'tv'],
+  ['assinaturas', 'Apps e assinaturas digitais', 'estilo', 'repeat'],
+  ['compras', 'Compras online e lojas', 'estilo', 'package'],
+  ['vestuario', 'Roupas e acessórios', 'estilo', 'shirt'],
+  ['saude', 'Saúde e farmácia', 'essencial', 'heart-pulse'],
+  ['casa', 'Casa e contas', 'essencial', 'home'],
+  ['educacao', 'Educação e livros', 'essencial', 'graduation-cap'],
+  ['lazer', 'Lazer e entretenimento', 'estilo', 'ticket'],
+  ['viagem', 'Viagens e hospedagem', 'estilo', 'plane'],
+  ['academia', 'Academia e esportes', 'estilo', 'dumbbell'],
+  ['beleza', 'Beleza e cuidados pessoais', 'estilo', 'sparkles'],
+  ['pets', 'Pets', 'essencial', 'paw-print'],
+  ['apostas', 'Apostas e jogos de azar', 'estilo', 'dices'],
+  ['servicos', 'Serviços e profissionais', 'essencial', 'wrench'],
+  ['pix-enviado', 'Pix e transferências enviadas', 'outros', 'send'],
+  ['saque', 'Saques em dinheiro', 'outros', 'banknote'],
+  ['tarifas', 'Juros, IOF e tarifas', 'financeiro', 'percent'],
+  ['outros', 'Outros', 'outros', 'circle-help'],
+  // Entradas (extrato de conta): não entram no perfil de gasto.
+  ['salario', 'Salário e renda', 'receita', 'briefcase'],
+  ['recebimentos', 'Pix e transferências recebidas', 'receita', 'arrow-down-left'],
+  ['rendimentos', 'Rendimentos e cashback', 'receita', 'trending-up'],
+  // Neutras: nem gasto nem renda (evita contar duas vezes).
+  ['pagamentos', 'Pagamento da fatura do cartão', 'neutro', 'badge-check', true],
+  ['movimentacoes', 'Aplicações, resgates e entre contas', 'neutro', 'arrow-left-right', true],
 ];
+
+export const BUILTIN_CATEGORIES: Category[] = DEFS.map(([id, name, group, icon, hidden]) => ({
+  id,
+  name,
+  group,
+  icon,
+  builtIn: true,
+  ...(hidden ? { hidden: true } : {}),
+}));
 
 export const FALLBACK_CATEGORY: CategoryId = 'outros';
 export const PAYMENT_CATEGORY: CategoryId = 'pagamentos';
 export const FEES_CATEGORY: CategoryId = 'tarifas';
+export const INCOME_FALLBACK: CategoryId = 'recebimentos';
+export const NEUTRAL_CATEGORY: CategoryId = 'movimentacoes';
+
+export function scopeOfGroup(group: SpendGroup): CategoryScope {
+  return group === 'receita' ? 'receita' : group === 'neutro' ? 'neutro' : 'gasto';
+}
+
+export function scopeOf(category: Category | undefined): CategoryScope {
+  return category ? scopeOfGroup(category.group) : 'gasto';
+}
 
 export const GROUP_LABELS: Record<SpendGroup, string> = {
   essencial: 'Essenciais',
   estilo: 'Estilo de vida',
   financeiro: 'Custo do crédito',
-  outros: 'Não classificado',
+  outros: 'Outros e não classificados',
+  receita: 'Entradas',
+  neutro: 'Movimentações neutras',
 };
 
 export const GROUP_HINTS: Record<SpendGroup, string> = {
   essencial: 'Mercado, saúde, casa, transporte, educação e pets',
   estilo: 'Restaurantes, delivery, streaming, compras, lazer e viagens',
   financeiro: 'Juros, IOF, multas e anuidade',
-  outros: 'Lançamentos ainda sem categoria',
+  outros: 'Pix enviados, saques e lançamentos sem categoria',
+  receita: 'Salário, Pix recebidos e rendimentos',
+  neutro: 'Pagamento da fatura, aplicações e transferências entre contas próprias',
 };
 
+/** Grupos do perfil de gasto. */
 export const GROUP_ORDER: SpendGroup[] = ['essencial', 'estilo', 'financeiro', 'outros'];
+/** Todos os grupos, para seletores de categoria. */
+export const ALL_GROUPS: SpendGroup[] = [...GROUP_ORDER, 'receita', 'neutro'];
 
 export function buildCategoryIndex(custom: Category[]): Map<CategoryId, Category> {
   const map = new Map<CategoryId, Category>();

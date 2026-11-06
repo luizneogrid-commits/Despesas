@@ -1,5 +1,5 @@
-import { GROUP_LABELS, GROUP_ORDER } from '../../domain/categories';
-import type { Category, CategoryId } from '../../domain/types';
+import { ALL_GROUPS, GROUP_LABELS, scopeOf } from '../../domain/categories';
+import type { Category, CategoryId, CategoryScope } from '../../domain/types';
 
 interface Props {
   id: string;
@@ -8,13 +8,18 @@ interface Props {
   onChange: (id: CategoryId) => void;
   label: string;
   includeAll?: boolean;
+  /** Lista também entradas e movimentações neutras (equivale a todos os escopos). */
   includeHidden?: boolean;
+  /** Escopos listados (padrão: só gasto). */
+  scopes?: CategoryScope[];
   className?: string;
   /** Opção vazia inicial (ex.: "Escolha a categoria"). */
   placeholder?: string;
 }
 
-/** Seletor nativo (acessível e ótimo no celular), agrupado por perfil de gasto. */
+const ALL_SCOPES: CategoryScope[] = ['gasto', 'receita', 'neutro'];
+
+/** Seletor nativo (acessível e ótimo no celular), agrupado por perfil. */
 export function CategorySelect({
   id,
   value,
@@ -23,10 +28,12 @@ export function CategorySelect({
   label,
   includeAll,
   includeHidden,
+  scopes,
   className,
   placeholder,
 }: Props) {
-  const visible = categories.filter((c) => includeHidden || !c.hidden);
+  const allowed = includeHidden ? ALL_SCOPES : (scopes ?? ['gasto']);
+  const visible = categories.filter((c) => allowed.includes(scopeOf(c)));
   return (
     <select
       id={id}
@@ -41,7 +48,7 @@ export function CategorySelect({
           {placeholder}
         </option>
       )}
-      {GROUP_ORDER.map((g) => {
+      {ALL_GROUPS.map((g) => {
         const items = visible.filter((c) => c.group === g);
         if (items.length === 0) return null;
         return (

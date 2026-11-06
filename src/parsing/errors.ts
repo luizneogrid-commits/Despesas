@@ -22,3 +22,12 @@ export class PdfInvalidError extends Error {
     this.name = 'PdfInvalidError';
   }
 }
+
+export class UnsupportedFileError extends Error {
+  constructor() {
+    super(
+      'Formato não suportado. Use o PDF da fatura/extrato ou o arquivo OFX/CSV exportado pelo banco.',
+    );
+    this.name = 'UnsupportedFileError';
+  }
+}

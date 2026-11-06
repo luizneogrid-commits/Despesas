@@ -2,6 +2,7 @@ import { formatYearMonth, weekday } from '../domain/dates';
 import { formatBRL, formatPercent } from '../domain/money';
 import type { Category, CategoryId, Transaction } from '../domain/types';
 import type { CategoryStat, Summary } from './aggregate';
+import type { CashflowSummary } from './cashflow';
 import type { InstallmentOutlook } from './installments';
 import type { Subscription } from './recurring';
 
@@ -24,6 +25,8 @@ interface Input {
   spend: Transaction[];
   subscriptions: Subscription[];
   outlook: InstallmentOutlook;
+  /** Fluxo da conta corrente no período (quando há extratos). */
+  cashflow?: CashflowSummary;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -35,8 +38,28 @@ export function buildInsights({
   spend,
   subscriptions,
   outlook,
+  cashflow,
 }: Input): Insight[] {
   const out: Insight[] = [];
+  if (cashflow && cashflow.inCents > 0) {
+    const outgoing = cashflow.spendCents + cashflow.cardPaymentCents;
+    const left = cashflow.inCents - outgoing;
+    out.push(
+      left >= 0
+        ? {
+            id: 'cashflow',
+            tone: 'positivo',
+            title: `Sobraram ${formatBRL(left)} na conta`,
+            detail: `Entraram ${formatBRL(cashflow.inCents)} e saíram ${formatBRL(outgoing)} em gastos e pagamento de fatura${cashflow.savedCents > 0 ? `; ${formatBRL(cashflow.savedCents)} foram para aplicações` : ''}.`,
+          }
+        : {
+            id: 'cashflow',
+            tone: 'atencao',
+            title: `Saiu ${formatBRL(-left)} a mais do que entrou`,
+            detail: `Entraram ${formatBRL(cashflow.inCents)} e saíram ${formatBRL(outgoing)} em gastos e pagamento de fatura no período.`,
+          },
+    );
+  }
   const name = (id: CategoryId) => categories.get(id)?.name ?? id;
   const stat = (id: CategoryId) => stats.find((s) => s.categoryId === id);
   const total = summary.totalCents;
@@ -177,6 +200,17 @@ export function buildInsights({
           'Definir um teto para o fim de semana costuma ser a forma mais simples de controlar essas categorias.',
       });
     }
+  }
+
+  const pix = stat('pix-enviado');
+  if (pix && pix.share >= 0.1) {
+    out.push({
+      id: 'pix',
+      tone: 'atencao',
+      title: `${formatPercent(pix.share)} do gasto são Pix e transferências sem destino definido`,
+      detail: `${formatBRL(pix.totalCents)} em ${plural(pix.count, 'envio', 'envios')}. Diga no de/para o que é cada destinatário (aluguel, diarista, academia…) e o perfil fica mais fiel.`,
+      action: 'de-para',
+    });
   }
 
   const unclassified = stat('outros');

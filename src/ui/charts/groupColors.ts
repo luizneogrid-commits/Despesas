@@ -6,4 +6,6 @@ export const GROUP_COLORS: Record<SpendGroup, string> = {
   estilo: 'var(--series-2)',
   financeiro: 'var(--series-3)',
   outros: 'var(--series-4)',
+  receita: 'var(--series-1)',
+  neutro: 'var(--series-4)',
 };

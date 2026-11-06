@@ -21,7 +21,15 @@ export interface DateToken {
 
 export interface AmountToken {
   kind: 'amount';
+  /** Convenção de fatura: negativo = crédito (sinal "-", sufixo "-", "C" ou "CR"). */
   cents: number;
+  /** Valor absoluto em centavos. */
+  abs: number;
+  /** Marcas de sinal como apareceram (extratos usam "-"/"D" para saída e "+"/"C" para entrada). */
+  minus: boolean;
+  plus: boolean;
+  creditMark: boolean;
+  debitMark: boolean;
   currency?: 'BRL' | 'USD' | 'EUR';
   raw: string;
   start: number;
@@ -39,7 +47,7 @@ export type Token = DateToken | AmountToken | TextToken;
 
 // Valor no formato brasileiro, com sinal/moeda opcionais e indicador de crédito.
 const AMOUNT_RE =
-  /(?<![\p{L}\d,.])([-−–]\s?)?((?:R\$|US\$|U\$|USD|EUR|€)\s?)?([-−–]\s?)?(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})(?![\d,%]|\s?%)(\s?-(?![\d\p{L}])|\s?(?:CR|C)(?=\s|$))?/gu;
+  /(?<![\p{L}\d,.])([-−–+]\s?)?((?:R\$|US\$|U\$|USD|EUR|€)\s?)?([-−–+]\s?)?(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})(?![\d,%]|\s?%)(\s?-(?![\d\p{L}])|\s?(?:CR|C|D)(?=\s|$))?/gu;
 
 const DATE_NUM_RE = /(?<![\d/.,-])(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{4}|\d{2}))?(?![\d/]|[.,]\d)/g;
 
@@ -73,11 +81,22 @@ export function tokenizeLine(line: string): Token[] {
     const end = start + raw.length;
     const intPart = (m[4] ?? '0').replace(/\./g, '');
     const cents = Number(intPart) * 100 + Number(m[5]);
-    const negative = Boolean(m[1] || m[3] || (m[6] && m[6].trim().length > 0));
+    const signs = `${m[1] ?? ''}${m[3] ?? ''}`;
+    const suffix = (m[6] ?? '').trim().toUpperCase();
+    const minus = /[-−–]/.test(signs) || suffix === '-';
+    const plus = signs.includes('+');
+    const creditMark = suffix === 'C' || suffix === 'CR';
+    const debitMark = suffix === 'D';
+    const negative = minus || creditMark;
     const currency = currencyOf(m[2]);
     found.push({
       kind: 'amount',
       cents: negative ? -cents : cents,
+      abs: cents,
+      minus,
+      plus,
+      creditMark,
+      debitMark,
       ...(currency ? { currency } : {}),
       raw: raw.trim(),
       start,

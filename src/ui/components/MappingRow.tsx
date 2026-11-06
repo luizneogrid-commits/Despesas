@@ -31,7 +31,14 @@ export function MappingRow({
   return (
     <li className="maprow">
       <div className="maprow__from">
-        <span className="eyebrow">De</span>
+        <span className="eyebrow">
+          De
+          {pending.isPix && (
+            <span className="chip" style={{ marginLeft: 6 }}>
+              Pix enviado: para quem?
+            </span>
+          )}
+        </span>
         <code title={pending.examples.join('\n')}>{pending.examples[0]}</code>
         <span className="maprow__meta">
           {pending.count} {pending.count === 1 ? 'lançamento' : 'lançamentos'} ·{' '}

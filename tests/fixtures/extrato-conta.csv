@@ -1,0 +1,6 @@
+Data,Valor,Identificador,Descrição
+01/11/2026,"8.500,00",f1,Transferência recebida pelo Pix - EMPRESA EXEMPLO
+03/11/2026,"-23,50",f2,Compra no débito - PADARIA REAL
+05/11/2026,"-1.881,04",f3,Pagamento de fatura
+07/11/2026,"-150,00",f4,Transferência enviada pelo Pix - JOAO PEDREIRO
+10/11/2026,"-300,00",f5,Aplicação RDB

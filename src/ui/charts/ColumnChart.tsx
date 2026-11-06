@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { formatBRL } from '../../domain/money';
 import { useElementWidth } from '../useElementWidth';
 import { axisBRL } from './format';
@@ -19,6 +19,9 @@ interface Props {
   focusLabel?: string;
   totalLabel?: string;
   ariaLabel: string;
+  /** Clique/Enter numa coluna (ex.: filtrar pelo mês). */
+  onSelect?: (key: string) => void;
+  selectHint?: string;
 }
 
 function niceMax(v: number): number {
@@ -42,6 +45,8 @@ export function ColumnChart({
   focusLabel,
   totalLabel = 'Total',
   ariaLabel,
+  onSelect,
+  selectHint,
 }: Props) {
   const { ref, width } = useElementWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
@@ -159,6 +164,18 @@ export function ColumnChart({
                 onPointerLeave={() => setActive(null)}
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive(null)}
+                {...(onSelect
+                  ? {
+                      style: { cursor: 'pointer' },
+                      onClick: () => onSelect(d.key),
+                      onKeyDown: (e: KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelect(d.key);
+                        }
+                      },
+                    }
+                  : {})}
               />
             </g>
           );
@@ -188,6 +205,7 @@ export function ColumnChart({
             <strong>{formatBRL(act.value)}</strong>
             <span>{totalLabel}</span>
           </div>
+          {onSelect && selectHint && <div className="tooltip__hint">{selectHint}</div>}
         </div>
       )}
     </div>

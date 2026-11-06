@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import { categorize, compileRules } from '../categorization/categorizer';
+import { categorize, compileRules, kindForScope } from '../categorization/categorizer';
 import { displayMerchant } from '../categorization/normalize';
-import { buildCategoryIndex, slugify } from '../domain/categories';
+import { buildCategoryIndex, scopeOf, slugify } from '../domain/categories';
 import type {
   Category,
   CategoryId,
   PersistedState,
   RuleMatch,
   SpendGroup,
+  Statement,
   Transaction,
   UserRule,
 } from '../domain/types';
@@ -79,6 +80,8 @@ interface AppState extends PersistedState {
   hydrate: () => Promise<void>;
   commitImport: (draft: ImportDraft, opts?: { replaceStatementId?: string }) => void;
   removeStatement: (id: string) => void;
+  /** Desfaz uma remoção: devolve o documento e seus lançamentos. */
+  restoreStatement: (statement: Statement, transactions: Transaction[]) => void;
   setCategory: (txId: string, categoryId: CategoryId, applyToSimilar: boolean) => number;
   toggleExcluded: (txId: string) => void;
   /** Cria ou atualiza mapeamentos de/para e recategoriza tudo. */
@@ -100,13 +103,16 @@ export function recategorize(
   rules: UserRule[],
   categories: Category[],
 ): Transaction[] {
-  const compiled = compileRules(rules);
+  const compiled = compileRules(rules, categories);
   const valid = buildCategoryIndex(categories);
   return txs.map((t) => {
     if (t.categorySource === 'manual' && valid.has(t.categoryId)) return t;
-    const r = categorize(t.rawDescription, t.kind, compiled);
+    // Sempre a partir do tipo lido no documento: apagar um de/para desfaz a conversão.
+    const base = t.parsedKind ?? t.kind;
+    const r = categorize(t.rawDescription, base, compiled, t.amountCents);
     const next: Transaction = {
       ...t,
+      kind: r.kind ?? base,
       categoryId: r.categoryId,
       categorySource: r.source,
       merchantName: r.brand ?? displayMerchant(t.rawDescription),
@@ -156,6 +162,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
     });
   },
 
+  restoreStatement: (statement, txs) =>
+    set((s) => ({
+      statements: [...s.statements.filter((st) => st.id !== statement.id), statement].sort((a, b) =>
+        a.referenceMonth.localeCompare(b.referenceMonth),
+      ),
+      transactions: [...s.transactions.filter((t) => t.statementId !== statement.id), ...txs],
+    })),
+
   removeStatement: (id) =>
     set((s) => ({
       statements: s.statements.filter((st) => st.id !== id),
@@ -167,9 +181,23 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const tx = s.transactions.find((t) => t.id === txId);
     if (!tx) return 0;
     if (!applyToSimilar || !tx.merchantKey) {
+      const index = buildCategoryIndex(s.customCategories);
+      const scope = scopeOf(index.get(categoryId));
+      const credit = tx.amountCents < 0;
+      // Uma saída não vira entrada; nos outros casos o tipo acompanha a categoria.
+      if (scope === 'receita' && !credit) return 0;
+      const kind = kindForScope(scope, categoryId, tx.parsedKind ?? tx.kind, credit);
       set({
         transactions: s.transactions.map((t) =>
-          t.id === txId ? { ...t, categoryId, categorySource: 'manual' as const } : t,
+          t.id === txId
+            ? {
+                ...t,
+                categoryId,
+                kind,
+                parsedKind: t.parsedKind ?? t.kind,
+                categorySource: 'manual' as const,
+              }
+            : t,
         ),
       });
       return 1;

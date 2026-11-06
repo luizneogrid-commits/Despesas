@@ -1,69 +1,29 @@
 import { ArrowRight, Upload, X } from 'lucide-react';
 import { useState } from 'react';
-import type { PeriodKey } from '../../analytics/aggregate';
 import { formatMonthAxis, formatYearMonth } from '../../domain/dates';
 import { formatBRL, formatInt, formatPercent } from '../../domain/money';
 import type { CategoryId } from '../../domain/types';
 import { CategoryBars, Delta } from '../charts/CategoryBars';
 import { ColumnChart } from '../charts/ColumnChart';
 import { GroupBar } from '../charts/GroupBar';
+import { AttentionPanel } from '../components/AttentionPanel';
+import { CashflowPanel } from '../components/CashflowPanel';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { ContextFilters } from '../components/ContextFilters';
 import { navigate } from '../route';
 import { useDashboard, type DashboardData } from '../useDashboard';
 import { EMPTY_TX_FILTER, useUiStore } from '../uiStore';
 
-function openTransactions(patch: { categoryId?: CategoryId; month?: string }) {
-  useUiStore.getState().setTxFilter({ ...EMPTY_TX_FILTER, ...patch });
+function openTransactions(patch: { categoryId?: CategoryId; query?: string; month?: string }) {
+  const ui = useUiStore.getState();
+  ui.setTxFilter({
+    ...EMPTY_TX_FILTER,
+    ...(patch.categoryId ? { categoryId: patch.categoryId } : {}),
+    ...(patch.query ? { query: patch.query } : {}),
+  });
+  if (patch.month) ui.setPeriod(`m:${patch.month}`);
+  ui.setOrigin('visao-geral');
   navigate('lancamentos');
-}
-
-function Filters({ data }: { data: DashboardData }) {
-  const period = useUiStore((s) => s.period);
-  const setPeriod = useUiStore((s) => s.setPeriod);
-  const card = useUiStore((s) => s.card);
-  const setCard = useUiStore((s) => s.setCard);
-  const n = data.available.length;
-  return (
-    <div className="toolbar" role="group" aria-label="Filtros da visão geral">
-      <label className="field" style={{ flex: '0 1 240px' }}>
-        <span>Período</span>
-        <select
-          id="filtro-periodo"
-          className="select"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as PeriodKey)}
-        >
-          <option value="all">Todas as faturas ({n})</option>
-          {n > 3 && <option value="last3">Últimas 3 faturas</option>}
-          {n > 6 && <option value="last6">Últimas 6 faturas</option>}
-          {n > 12 && <option value="last12">Últimas 12 faturas</option>}
-          {[...data.available].reverse().map((m) => (
-            <option key={m} value={`m:${m}`}>
-              Fatura de {formatYearMonth(m, 'long')}
-            </option>
-          ))}
-        </select>
-      </label>
-      {data.cards.length > 1 && (
-        <label className="field" style={{ flex: '0 1 200px' }}>
-          <span>Cartão</span>
-          <select
-            id="filtro-cartao"
-            className="select"
-            value={card}
-            onChange={(e) => setCard(e.target.value)}
-          >
-            <option value="">Todos os cartões</option>
-            {data.cards.map((c) => (
-              <option key={c} value={c}>
-                Final {c}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-    </div>
-  );
 }
 
 /** Mini-série das faturas: o período selecionado aparece no acento. */
@@ -86,7 +46,7 @@ function Spark({ data }: { data: DashboardData }) {
         ))}
       </div>
       <span className="spark__caption">
-        Faturas de {first ? formatYearMonth(first) : ''} a {last ? formatYearMonth(last) : ''}
+        De {first ? formatYearMonth(first) : ''} a {last ? formatYearMonth(last) : ''}
       </span>
     </div>
   );
@@ -98,8 +58,8 @@ function Summary({ data }: { data: DashboardData }) {
   const next = outlook.schedule[0];
   const periodLabel =
     months.length === 1
-      ? `Fatura de ${formatYearMonth(months[0] ?? '', 'long')}`
-      : `${months.length} faturas`;
+      ? formatYearMonth(months[0] ?? '', 'long').replace(/^./, (c) => c.toUpperCase())
+      : `${months.length} meses`;
   return (
     <section className="panel summary" aria-labelledby="resumo-titulo">
       <div className="hero">
@@ -255,7 +215,7 @@ function Insights({ data }: { data: DashboardData }) {
         <p>Leituras automáticas do período</p>
       </div>
       {data.insights.length === 0 ? (
-        <p className="muted">Importe mais faturas para ver comparações e tendências.</p>
+        <p className="muted">Importe mais faturas ou extratos para ver comparações e tendências.</p>
       ) : (
         <ul className="plain insights">
           {data.insights.slice(0, 7).map((ins) => (
@@ -299,7 +259,7 @@ function Evolution({ data }: { data: DashboardData }) {
   const chartData = data.series.map((m) => ({
     key: m.month,
     label: formatMonthAxis(m.month),
-    longLabel: `Fatura de ${formatYearMonth(m.month, 'long')}`,
+    longLabel: formatYearMonth(m.month, 'long'),
     value: m.totalCents,
     focus: m.focusCents,
     dimmed: !months.has(m.month),
@@ -308,11 +268,11 @@ function Evolution({ data }: { data: DashboardData }) {
     <section className="panel" aria-labelledby="evolucao-titulo">
       <div className="panel__head">
         <div>
-          <h2 id="evolucao-titulo">Evolução por fatura</h2>
+          <h2 id="evolucao-titulo">Evolução mês a mês</h2>
           <p>
             {focusName
               ? `Destacando ${focusName} dentro do total de cada mês`
-              : 'Total gasto em cada fatura (sem pagamentos)'}
+              : 'Gasto de cada mês: fatura pelo mês de vencimento, conta pelo dia da movimentação'}
           </p>
         </div>
         <button
@@ -359,7 +319,9 @@ function Evolution({ data }: { data: DashboardData }) {
         <ColumnChart
           data={chartData}
           {...(focusName ? { focusLabel: focusName } : {})}
-          ariaLabel={`Gasto por fatura${focusName ? `, destacando ${focusName}` : ''}`}
+          ariaLabel={`Gasto por mês${focusName ? `, destacando ${focusName}` : ''}. Selecione um mês para filtrar.`}
+          onSelect={(month) => useUiStore.getState().setPeriod(`m:${month}`)}
+          selectHint="Clique para ver só este mês"
         />
       )}
     </section>
@@ -371,7 +333,7 @@ function Merchants({ data }: { data: DashboardData }) {
     <section className="panel" aria-labelledby="estab-titulo">
       <div className="panel__head">
         <h2 id="estab-titulo">Onde você mais gasta</h2>
-        <p>Estabelecimentos e marcas no período</p>
+        <p>Toque numa linha para ver os lançamentos</p>
       </div>
       <div className="table-wrap">
         <table className="ledger">
@@ -386,7 +348,16 @@ function Merchants({ data }: { data: DashboardData }) {
             {data.merchants.map((m) => {
               const cat = data.categories.get(m.categoryId);
               return (
-                <tr key={m.name}>
+                <tr
+                  key={m.name}
+                  className="clickable-row"
+                  tabIndex={0}
+                  aria-label={`${m.name}: ${m.count} vezes, ${formatBRL(m.totalCents)}. Ver lançamentos`}
+                  onClick={() => openTransactions({ query: m.name })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') openTransactions({ query: m.name });
+                  }}
+                >
                   <td>
                     <span className="name-cell">
                       <CategoryIcon icon={cat?.icon} size="sm" />
@@ -436,7 +407,7 @@ function Commitments({ data }: { data: DashboardData }) {
                       <span
                         className={`chip${s.confidence === 'confirmada' ? ' chip--carbon' : ''}`}
                       >
-                        {s.confidence === 'confirmada' ? `${s.monthsSeen} faturas` : 'provável'}
+                        {s.confidence === 'confirmada' ? `${s.monthsSeen} meses` : 'provável'}
                       </span>
                     </td>
                     <td className="right num">{formatBRL(s.monthlyCents)}</td>
@@ -529,10 +500,13 @@ export function DashboardPage() {
       <div className="page-head">
         <div>
           <h1>Para onde vai o seu dinheiro</h1>
-          <p>Perfil de gastos do cartão por categoria, a partir das faturas importadas.</p>
+          <p>
+            Perfil de gastos por categoria, a partir das faturas do cartão e dos extratos da conta.
+          </p>
         </div>
-        <Filters data={data} />
+        <ContextFilters />
       </div>
+      <AttentionPanel />
       <Summary data={data} />
       <div className="grid-2">
         <section className="panel" aria-labelledby="categorias-titulo">
@@ -565,6 +539,7 @@ export function DashboardPage() {
           <Insights data={data} />
         </div>
       </div>
+      {data.cashflow.length > 0 && <CashflowPanel data={data} />}
       <Evolution data={data} />
       <div className="grid-2 grid-2--even">
         <Merchants data={data} />

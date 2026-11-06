@@ -1,6 +1,8 @@
 import { compileRules } from '../categorization/categorizer';
 import { addMonths, isValidDate, parseISO, toISO, yearMonth } from '../domain/dates';
+import { normalizeText } from '../categorization/normalize';
 import type { PersistedState, Statement, Transaction, TxKind } from '../domain/types';
+import { classifyAccount } from '../parsing/parseAccount';
 import { SCHEMA_VERSION } from '../storage/persist';
 import { toTransaction } from './importService';
 
@@ -69,6 +71,7 @@ export function buildDemoState(today = new Date()): PersistedState {
   const statements: Statement[] = [];
   const transactions: Transaction[] = [];
   let previousTotal = 248700;
+  const cardTotals = new Map<string, number>();
 
   for (let mi = 0; mi < MONTHS; mi++) {
     const ref = addMonths(latest, mi - (MONTHS - 1));
@@ -168,8 +171,12 @@ export function buildDemoState(today = new Date()): PersistedState {
       importedAt: new Date(Date.UTC(y, m - 1, 8)).toISOString(),
       warnings: [],
       isDemo: true,
+      accountType: 'cartao',
     });
+    cardTotals.set(ref, total);
   }
+
+  buildDemoAccount(latest, cardTotals, rules, statements, transactions);
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -178,4 +185,79 @@ export function buildDemoState(today = new Date()): PersistedState {
     rules: [],
     customCategories: [],
   };
+}
+
+/** Extrato de conta de exemplo: salário, aluguel via Pix, contas, aplicação e a fatura paga. */
+function buildDemoAccount(
+  latest: string,
+  cardTotals: Map<string, number>,
+  rules: ReturnType<typeof compileRules>,
+  statements: Statement[],
+  transactions: Transaction[],
+) {
+  let balance = 320000;
+  for (let mi = 0; mi < MONTHS; mi++) {
+    const ref = addMonths(latest, mi - (MONTHS - 1));
+    const rand = rng(77 + mi * 131);
+    const { y, m } = parseISO(`${ref}-01`);
+    const statementId = `demo-conta-${ref}`;
+    const opening = balance;
+    const lastDay = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1] ?? 30;
+    const rows: Array<[day: number, desc: string, cents: number]> = [
+      [5, 'SALARIO EMPRESA EXEMPLO LTDA', -850000],
+      [6, 'PIX ENVIADO JOSE CARLOS ALUGUEL', 220000],
+      [8, 'PAGAMENTO FATURA CARTAO', cardTotals.get(ref) ?? 250000],
+      [10, 'PAGAMENTO DE BOLETO ENEL SP', Math.round(15000 + rand() * 8000)],
+      [11, 'DEBITO AUTOMATICO SABESP', Math.round(9000 + rand() * 4000)],
+      [12, 'APLICACAO CDB', 100000],
+      [15, 'COMPRA CARTAO DEBITO PADARIA REAL', Math.round(1500 + rand() * 3000)],
+      [18, 'PIX ENVIADO ANA DIARISTA', 18000],
+      [22, 'PIX ENVIADO ANA DIARISTA', 18000],
+      [25, 'TAR PACOTE SERVICOS', 3290],
+      [28, 'PIX RECEBIDO CARLA MENDES', -Math.round(4000 + rand() * 9000)],
+      [Math.min(30, lastDay), 'RENDIMENTO POUPANCA', -Math.round(900 + rand() * 600)],
+    ];
+    if (rand() > 0.4) rows.push([20, 'SAQUE BANCO24HORAS', 20000]);
+    rows.sort((a, b) => a[0] - b[0]);
+    const txs = rows.map(([day, desc, cents], i) => {
+      balance -= cents;
+      const credit = cents < 0;
+      return toTransaction(
+        {
+          date: toISO(y, m, day),
+          rawDescription: desc,
+          amountCents: cents,
+          kind: classifyAccount(normalizeText(desc), credit),
+          international: false,
+          balanceCents: balance,
+        },
+        { id: `${statementId}-${i}`, statementId, referenceMonth: ref, source: 'conta' },
+        rules,
+      );
+    });
+    transactions.push(...txs);
+    statements.push({
+      id: statementId,
+      fileName: `extrato-exemplo-${ref}.pdf`,
+      fileHash: `demo-conta-${ref}`,
+      issuerId: 'exemplo-conta',
+      issuerName: 'Conta de exemplo',
+      referenceMonth: ref,
+      accountType: 'conta',
+      periodStart: toISO(y, m, 1),
+      periodEnd: toISO(y, m, lastDay),
+      openingBalanceCents: opening,
+      closingBalanceCents: balance,
+      netMovementCents: balance - opening,
+      accountLabel: 'Ag. 0001 · CC 12345-6',
+      parsedTotalCents: txs.reduce(
+        (a, t) => (['compra', 'encargo', 'estorno'].includes(t.kind) ? a + t.amountCents : a),
+        0,
+      ),
+      transactionCount: txs.length,
+      importedAt: new Date(Date.UTC(y, m - 1, lastDay)).toISOString(),
+      warnings: [],
+      isDemo: true,
+    });
+  }
 }

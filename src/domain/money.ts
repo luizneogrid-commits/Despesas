@@ -54,3 +54,8 @@ export function sumCents(values: Iterable<number>): number {
   for (const v of values) total += v;
   return total;
 }
+
+/** Valor de um lançamento para exibição: saídas "R$ 10,00", entradas/créditos "+R$ 10,00". */
+export function formatMovement(amountCents: number): string {
+  return amountCents < 0 ? `+${formatBRL(-amountCents)}` : formatBRL(amountCents);
+}

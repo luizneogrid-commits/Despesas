@@ -5,8 +5,11 @@
  */
 import { displayMerchant, merchantKey, normalizeText } from '../categorization/normalize';
 import { FALLBACK_CATEGORY } from '../domain/categories';
+
+const PIX_CATEGORY = 'pix-enviado';
 import type { Category, CategoryId, RuleMatch, Transaction, UserRule } from '../domain/types';
 import type { MappingInput } from '../store/appStore';
+import { parseCSV } from '../utils/csv';
 
 export interface PendingMerchant {
   /** Chave do estabelecimento: vira o "de" sugerido. */
@@ -17,18 +20,18 @@ export interface PendingMerchant {
   totalCents: number;
   lastDate: string;
   txIds: string[];
+  /** Pix/transferência enviada (o destino define a categoria) ou estabelecimento desconhecido. */
+  isPix: boolean;
 }
 
 /** Lançamentos que nenhuma regra reconheceu ("Outros"), agrupados por estabelecimento. */
 export function pendingMerchants(txs: Transaction[]): PendingMerchant[] {
   const map = new Map<string, PendingMerchant>();
   for (const t of txs) {
-    if (
-      t.kind === 'pagamento' ||
-      t.categoryId !== FALLBACK_CATEGORY ||
-      t.categorySource === 'manual'
-    )
-      continue;
+    // Sem categoria, ou Pix enviado que só a base genérica reconheceu (quem é "Ana"?).
+    const unknown = t.categoryId === FALLBACK_CATEGORY && t.categorySource !== 'manual';
+    const genericPix = t.categoryId === PIX_CATEGORY && t.categorySource === 'sistema';
+    if (t.kind === 'pagamento' || t.amountCents <= 0 || (!unknown && !genericPix)) continue;
     const key = t.merchantKey || merchantKey(t.rawDescription) || normalizeText(t.rawDescription);
     if (!key) continue;
     const cur =
@@ -41,6 +44,7 @@ export function pendingMerchants(txs: Transaction[]): PendingMerchant[] {
         totalCents: 0,
         lastDate: t.date,
         txIds: [],
+        isPix: genericPix,
       } as PendingMerchant);
     cur.count += 1;
     cur.totalCents += t.amountCents;
@@ -77,41 +81,6 @@ export function mappingsToCSV(rules: UserRule[], categories: Map<CategoryId, Cat
     ]);
   }
   return '\uFEFF' + rows.map((r) => r.map(cell).join(';')).join('\r\n');
-}
-
-/** CSV simples com aspas, separador ";" ou ",". */
-export function parseCSV(text: string): string[][] {
-  const src = text.replace(/^\uFEFF/, '');
-  const firstLine = src.split(/\r?\n/, 1)[0] ?? '';
-  const sep =
-    (firstLine.match(/;/g)?.length ?? 0) >= (firstLine.match(/,/g)?.length ?? 0) ? ';' : ',';
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let quoted = false;
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (quoted) {
-      if (c === '"' && src[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (c === '"') quoted = false;
-      else field += c;
-    } else if (c === '"' && field === '') quoted = true;
-    else if (c === sep) {
-      row.push(field);
-      field = '';
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && src[i + 1] === '\n') i++;
-      row.push(field);
-      if (row.some((f) => f.trim())) rows.push(row);
-      row = [];
-      field = '';
-    } else field += c;
-  }
-  row.push(field);
-  if (row.some((f) => f.trim())) rows.push(row);
-  return rows;
 }
 
 const MATCH_BY_LABEL: Record<string, RuleMatch> = {

@@ -93,3 +93,15 @@ describe('normalização', () => {
     expect(displayMerchant('LOJA DE MOVEIS')).toBe('Loja de Moveis');
   });
 });
+
+describe('nomes de exibição de operações de conta', () => {
+  it('mostra quem recebeu ou cobrou', () => {
+    expect(displayMerchant('PIX ENVIADO JOSE CARLOS ALUGUEL')).toBe('Jose Carlos Aluguel');
+    expect(displayMerchant('Transferência enviada pelo Pix - MARIA DA SILVA')).toBe(
+      'Maria da Silva',
+    );
+    expect(displayMerchant('COMPRA CARTAO DEBITO PADARIA REAL')).toBe('Padaria Real');
+    expect(displayMerchant('PAGAMENTO DE BOLETO ENEL SP')).toBe('Enel SP');
+    expect(displayMerchant('PIX')).toBe('Pix');
+  });
+});
