@@ -1,0 +1,6 @@
+dist
+artifact
+coverage
+public/pdf.worker.min.mjs
+package-lock.json
+artifact-build

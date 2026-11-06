@@ -1,0 +1,14 @@
+{
+  "fatura-coluna-unica.pdf": {
+    "declaredTotalCents": 188104,
+    "parsedTransactions": 19
+  },
+  "fatura-duas-colunas.pdf": {
+    "declaredTotalCents": 282393,
+    "parsedTransactions": 20
+  },
+  "fatura-tabela.pdf": {
+    "declaredTotalCents": 46912,
+    "parsedTransactions": 11
+  }
+}

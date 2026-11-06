@@ -1,0 +1,55 @@
+{
+  "id": "./",
+  "name": "Raio-X da Fatura",
+  "short_name": "Raio-X",
+  "description": "Importe o PDF da fatura do cartão e veja seu perfil de gastos por categoria, parcelas futuras e assinaturas. Tudo processado no aparelho.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./#visao-geral",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f2f4f8",
+  "theme_color": "#3a3cb4",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Importar fatura",
+      "short_name": "Importar",
+      "url": "./#importar",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Parcelas futuras",
+      "short_name": "Parcelas",
+      "url": "./#parcelas",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "De/para",
+      "url": "./#de-para",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "./compartilhar",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "fatura", "accept": ["application/pdf", ".pdf"] }]
+    }
+  },
+  "file_handlers": [{ "action": "./", "accept": { "application/pdf": [".pdf"] } }]
+}

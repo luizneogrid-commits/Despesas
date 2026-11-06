@@ -1,0 +1,9 @@
+node_modules
+dist
+artifact
+coverage
+public/pdf.worker.min.mjs
+*.local
+.DS_Store
+artifact-build
+*.tsbuildinfo
