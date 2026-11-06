@@ -57,7 +57,7 @@ Como foi feito:
 - **Hospedagem**: GitHub Pages, publicado pelo workflow `.github/workflows/deploy.yml` a cada push na `main`
   (roda os testes antes). Os caminhos são relativos, então o app funciona em `/Despesas/` ou em qualquer subpasta.
   Na primeira vez, ative em **Settings → Pages → Build and deployment → Source: GitHub Actions** e rode o
-  workflow de novo (Actions → *Publicar no GitHub Pages* → *Re-run all jobs*).
+  workflow de novo (Actions → _Publicar no GitHub Pages_ → _Re-run all jobs_).
 
 ## Como rodar
 
