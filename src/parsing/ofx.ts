@@ -6,6 +6,7 @@
  */
 import { normalizeText, prettifyDescription } from '../categorization/normalize';
 import { isValidDate, toISO, yearMonth } from '../domain/dates';
+import { separateLocations } from './merchantText';
 import type { IssuerInfo } from './metadata';
 import { classifyAccount } from './parseAccount';
 import { classify, type ParsedStatement, type ParsedTransaction } from './parseStatement';
@@ -125,7 +126,7 @@ export function parseOFX(text: string): ParsedStatement {
     format: 'ofx',
     referenceMonth: yearMonth(y ?? 1970, m ?? 1),
     referenceEstimated: isCard,
-    transactions,
+    transactions: separateLocations(transactions),
     unrecognizedLines: [],
     skippedFutureCount: 0,
     warnings: transactions.length === 0 ? ['O arquivo OFX não tem lançamentos.'] : [],

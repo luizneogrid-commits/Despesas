@@ -10,5 +10,17 @@
   "fatura-tabela.pdf": {
     "declaredTotalCents": 46912,
     "parsedTransactions": 11
+  },
+  "fatura-cidades.pdf": {
+    "declaredTotalCents": 102257,
+    "parsedTransactions": 12
+  },
+  "fatura-estab-esquerda.pdf": {
+    "declaredTotalCents": 109415,
+    "parsedTransactions": 12
+  },
+  "fatura-sem-cabecalho.pdf": {
+    "declaredTotalCents": 47905,
+    "parsedTransactions": 7
   }
 }

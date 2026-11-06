@@ -6,6 +6,7 @@
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { PdfInvalidError, PdfNoTextError, PdfPasswordError } from './errors';
 import { extractLinesFromDocument } from './extract';
+import type { Line } from './lines';
 
 let workerConfigured = false;
 
@@ -21,7 +22,7 @@ function configureWorker() {
 }
 
 export interface PdfTextResult {
-  lines: string[];
+  lines: Line[];
   pageCount: number;
 }
 
@@ -46,7 +47,10 @@ export async function readPdfLines(data: ArrayBuffer, password?: string): Promis
   }
   try {
     const lines = await extractLinesFromDocument(doc);
-    const textChars = lines.join('').replace(/\s/g, '').length;
+    const textChars = lines
+      .map((l) => (typeof l === 'string' ? l : l.text))
+      .join('')
+      .replace(/\s/g, '').length;
     if (textChars < 40) throw new PdfNoTextError();
     return { lines, pageCount: doc.numPages };
   } finally {

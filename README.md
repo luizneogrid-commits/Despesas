@@ -116,8 +116,10 @@ src/
 ├── parsing/          PDF → linhas → lançamentos
 │   ├── pdf.ts          carrega pdf.js (worker de mesma origem, import dinâmico)
 │   ├── extract.ts      itens de texto posicionados por página
-│   ├── lines.ts        reconstrói linhas e detecta layout em duas colunas
-│   ├── tokenize.ts     DATA / VALOR / TEXTO
+│   ├── lines.ts        reconstrói linhas (com a posição de cada bloco) e detecta duas colunas
+│   ├── tokenize.ts     DATA / VALOR / TEXTO, com a posição x de cada token
+│   ├── merchantText.ts qual parte da linha é o estabelecimento (cabeçalho, geometria, repetição)
+│   ├── places.ts       cidades, UF e países: o que não identifica o estabelecimento
 │   ├── parseStatement.ts  fatura: máquina de estados, seções, parcelas, ano, tipo
 │   ├── parseAccount.ts    extrato de conta: data do dia, continuação, saldo, sinal
 │   ├── ofx.ts / csvStatement.ts  OFX (SGML/XML, conta e cartão) e CSV por cabeçalho
@@ -136,15 +138,31 @@ src/
 1. **pdf.js** extrai fragmentos de texto com posição (x, y). Nada é renderizado e o PDF não executa scripts.
 2. **Linhas**: fragmentos são agrupados por y com tolerância proporcional à fonte e ordenados por x.
    Se várias linhas têm um valor seguido de uma data após um vão, a página é tratada como **duas colunas**
-   e a coluna da esquerda é lida inteira antes da direita.
+   e a coluna da esquerda é lida inteira antes da direita. Cada linha guarda seus **blocos** (células) com a
+   posição horizontal: um vão maior que ~1 caractere separa "PADARIA REAL" de "SAO PAULO".
 3. **Tokens**: cada linha vira uma sequência de `DATA`, `VALOR` e `TEXTO` (valores são mascarados antes de
    procurar datas, para não confundir `1.234,56` com `12.34`).
-4. **Máquina de estados**: reconhece `DATA [DATA] TEXTO [PARCELA] VALOR…`, inclusive vários lançamentos na
-   mesma linha. Uma data `dd/mm` entre a descrição e o valor é uma parcela.
-5. **Contexto**: cabeçalhos mudam o estado (cartão atual, seção internacional, bloco de próximas faturas).
+4. **Máquina de estados**: reconhece `[TEXTO] DATA [DATA] TEXTO [PARCELA] VALOR…`, inclusive vários lançamentos
+   na mesma linha. Uma data `dd/mm` entre a descrição e o valor (ou antes da coluna de cidade) é uma parcela.
+5. **Estabelecimento × cidade** (segunda passada, com o documento inteiro). A descrição impressa vem do campo
+   "nome/cidade/país" da transação de cartão: ~22 caracteres de nome, 13 de cidade (por isso "BELO HORIZONT")
+   e o país. O leitor decide o que é nome, em ordem de confiança:
+   - **cabeçalho** da tabela ("Estabelecimento", "Descrição", "Cidade", "Local"…) e a posição de cada coluna,
+     inclusive quando o estabelecimento está **à esquerda da data**;
+   - **geometria**: uma coluna cujos textos são, na maioria, cidades é coluna de lugar (vale para cidades fora
+     da lista); sem cabeçalho, texto antes da data com só cidade depois dela indica o layout "nome à esquerda";
+   - **repetição**: um final que se repete em vários estabelecimentos diferentes ("… NATAL") é lugar;
+   - **lista de lugares**: capitais e ~150 cidades, UF, países e cidades estrangeiras comuns em cobranças
+     online. Nomes ambíguos ("NATAL", "SERRA", "PAULISTA") só saem com reforço (UF, país, coluna ou
+     repetição), e cidade que faz parte do nome fica ("DROGARIA SAO PAULO", "CHURRASCARIA PORTO ALEGRE").
+   - **outros casos**: a cidade grudada pelo limite de colunas ("HELP.UBER.COSAO PAULO BR"), a cidade na linha de
+     baixo e o nome que ficou numa linha à parte (células de duas linhas). A cidade vai para o campo **Local**
+     (chip nos lançamentos, busca e exportação) e não entra no nome, na chave do estabelecimento nem no de/para.
+     Cidade no exterior marca a compra como internacional.
+6. **Contexto**: cabeçalhos mudam o estado (cartão atual, seção internacional, bloco de próximas faturas).
    Linhas sem data logo após um lançamento anexam informações a ele (parcela, valor em dólar).
-6. **Classificação**: pagamento, estorno, encargo ou compra. **Ano** inferido pelo vencimento.
-7. **Revisão**: o usuário vê a conferência com o total da fatura, o mês de referência (editável), a prévia por
+7. **Classificação**: pagamento, estorno, encargo ou compra. **Ano** inferido pelo vencimento.
+8. **Revisão**: o usuário vê a conferência com o total da fatura, o mês de referência (editável), a prévia por
    categoria e as linhas com valor que não foram reconhecidas, antes de confirmar.
 
 ### Decisões e boas práticas aplicadas
@@ -193,7 +211,15 @@ vence o nome do lojista. Rode `npm test` e, se quiser, acrescente um caso em
    `metadata.ts` (rótulos de vencimento e total).
 
 A tela de revisão mostra as linhas com valor que não foram reconhecidas: é o melhor ponto de partida
-para diagnosticar um banco novo.
+para diagnosticar um banco novo. Se o nome vier trocado pela cidade, inclua a cidade em `places.ts` ou o
+rótulo da coluna em `HEADER_LABELS` (`merchantText.ts`).
+
+### Faturas importadas antes da separação de cidade
+
+Os dados salvos são migrados ao abrir o app (schema 2): a cidade no fim do nome vai para **Local** e os
+mapeamentos do de/para criados com a cidade passam a apontar para o estabelecimento. Quando a leitura antiga
+trouxe **só a cidade** no lugar do nome, o Início avisa: importe o mesmo PDF de novo e escolha
+**"Substituir pela leitura nova"** (as categorias ajustadas à mão são mantidas).
 
 ## Limitações conhecidas
 

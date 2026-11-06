@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Globe, Search, SlidersHorizontal } from 'lucide-react';
+import { Eye, EyeOff, Globe, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useState } from 'react';
 import { isSpend, monthsForPeriod } from '../../analytics/aggregate';
 import { normalizeText } from '../../categorization/normalize';
@@ -68,7 +68,11 @@ export function TransactionsPage() {
         if (filter.categoryId && t.categoryId !== filter.categoryId) return false;
         if (filter.kind && t.kind !== filter.kind) return false;
         if (filter.onlyUnclassified && t.categoryId !== 'outros') return false;
-        if (q && !normalizeText(`${t.description} ${t.merchantName}`).includes(q)) return false;
+        if (
+          q &&
+          !normalizeText(`${t.description} ${t.merchantName} ${t.location ?? ''}`).includes(q)
+        )
+          return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
@@ -264,6 +268,11 @@ export function TransactionsPage() {
                     <div className="txrow__tags">
                       {t.merchantName !== t.description && (
                         <span className="chip">{t.merchantName}</span>
+                      )}
+                      {t.location && (
+                        <span className="chip" title="Local da compra (não faz parte do nome)">
+                          <MapPin size={12} aria-hidden="true" /> {t.location}
+                        </span>
                       )}
                       {t.installment && (
                         <span className="chip chip--carbon">

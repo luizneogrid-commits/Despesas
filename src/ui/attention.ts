@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import { useFolder } from '../pwa/folderWatch';
+import { isLocationText } from '../parsing/places';
+import { isOutdatedRead } from '../services/importService';
 import { pendingMerchants } from '../services/mappings';
 import { useAppStore } from '../store/appStore';
 import { useQueue } from './importQueue';
+import type { Statement, Transaction } from '../domain/types';
 import type { Route } from './route';
 
 export interface AttentionItem {
-  id: 'revisar' | 'de-para' | 'pasta';
+  id: 'revisar' | 'de-para' | 'pasta' | 'reler';
   title: string;
   detail: string;
   action: { label: string; route: Route };
@@ -25,10 +28,15 @@ export function useAttention(): {
   reviews: number;
 } {
   const transactions = useAppStore((s) => s.transactions);
+  const statements = useAppStore((s) => s.statements);
   const queue = useQueue((s) => s.items);
   const folderStatus = useFolder((s) => s.status);
   const folderName = useFolder((s) => s.folderName);
   const pending = useMemo(() => pendingMerchants(transactions), [transactions]);
+  const reread = useMemo(
+    () => cityOnlyStatements(statements, transactions),
+    [statements, transactions],
+  );
 
   return useMemo(() => {
     const items: AttentionItem[] = [];
@@ -57,6 +65,16 @@ export function useAttention(): {
         count: pending.length,
       });
     }
+    if (reread.statements > 0) {
+      const many = reread.statements > 1;
+      items.push({
+        id: 'reler',
+        title: `${reread.transactions} ${reread.transactions === 1 ? 'lançamento aparece' : 'lançamentos aparecem'} só com o nome da cidade`,
+        detail: `${many ? `${reread.statements} faturas foram lidas` : 'Uma fatura foi lida'} antes da melhoria que separa o estabelecimento da cidade. Importe o mesmo PDF de novo e escolha "Substituir pela leitura nova".`,
+        action: { label: 'Importar de novo', route: 'importar' },
+        count: reread.statements,
+      });
+    }
     if (folderStatus === 'precisa-permissao') {
       items.push({
         id: 'pasta',
@@ -72,5 +90,26 @@ export function useAttention(): {
       pending: pending.length,
       reviews,
     };
-  }, [queue, pending, folderStatus, folderName]);
+  }, [queue, pending, reread, folderStatus, folderName]);
+}
+
+/**
+ * Faturas em PDF lidas por um leitor anterior em que algum lançamento ficou
+ * só com a cidade no lugar do nome: a leitura nova recupera o estabelecimento.
+ */
+export function cityOnlyStatements(
+  statements: Statement[],
+  transactions: Transaction[],
+): { statements: number; transactions: number } {
+  const outdated = new Set(
+    statements.filter((s) => isOutdatedRead(s) && (s.format ?? 'pdf') === 'pdf').map((s) => s.id),
+  );
+  if (outdated.size === 0) return { statements: 0, transactions: 0 };
+  const affected = transactions.filter(
+    (t) => outdated.has(t.statementId) && isLocationText(t.rawDescription, { strong: true }),
+  );
+  return {
+    statements: new Set(affected.map((t) => t.statementId)).size,
+    transactions: affected.length,
+  };
 }

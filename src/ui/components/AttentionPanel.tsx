@@ -1,10 +1,11 @@
-import { ArrowLeftRight, ChevronRight, FileWarning, FolderSync } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, FileWarning, FolderSync, MapPin } from 'lucide-react';
 import { useAttention, type AttentionItem } from '../attention';
 
 const ICONS: Record<AttentionItem['id'], typeof FileWarning> = {
   revisar: FileWarning,
   'de-para': ArrowLeftRight,
   pasta: FolderSync,
+  reler: MapPin,
 };
 
 /** Tudo o que pede ação, num lugar só, com o próximo passo de cada item. */

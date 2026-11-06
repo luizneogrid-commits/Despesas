@@ -3,7 +3,7 @@
  * (que configura o worker do navegador) para poder ser testado no Node com
  * o build "legacy" do pdf.js.
  */
-import { BREAK_LINE, pageItemsToLines, type PositionedText } from './lines';
+import { BREAK_LINE, pageItemsToLines, type Line, type PositionedText } from './lines';
 
 /** Subconjunto estrutural do PDFDocumentProxy (vale para o build normal e o legacy). */
 export interface PdfDocLike {
@@ -26,8 +26,8 @@ function isTextItem(item: unknown): item is TextItem {
 }
 
 /** Extrai linhas de texto em ordem de leitura de um documento já aberto. */
-export async function extractLinesFromDocument(doc: PdfDocLike): Promise<string[]> {
-  const lines: string[] = [];
+export async function extractLinesFromDocument(doc: PdfDocLike): Promise<Line[]> {
+  const lines: Line[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const content = await page.getTextContent();

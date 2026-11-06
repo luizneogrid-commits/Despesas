@@ -35,6 +35,17 @@ export interface FileMeta {
 
 export type FileFormat = 'pdf' | 'ofx' | 'csv';
 
+/**
+ * Versão do leitor. 2: nome do estabelecimento separado da cidade/país.
+ * Um arquivo já importado por uma versão anterior pode ser lido de novo.
+ */
+export const READER_VERSION = 2;
+
+/** A importação foi feita por um leitor anterior e ganharia com uma nova leitura? */
+export function isOutdatedRead(statement: Statement): boolean {
+  return !statement.isDemo && (statement.readerVersion ?? 1) < READER_VERSION;
+}
+
 /** Formatos aceitos, pela extensão (ou tipo MIME). */
 export function fileFormat(file: Pick<File, 'name' | 'type'>): FileFormat | null {
   const name = file.name.toLowerCase();
@@ -50,7 +61,10 @@ type ParsedTx = ParsedStatement['transactions'][number];
 export function toTransaction(
   p: Pick<ParsedTx, 'date' | 'rawDescription' | 'amountCents' | 'kind' | 'international'> &
     Partial<
-      Pick<ParsedTx, 'installment' | 'foreign' | 'cardLast4' | 'balanceCents' | 'externalId'>
+      Pick<
+        ParsedTx,
+        'installment' | 'foreign' | 'cardLast4' | 'balanceCents' | 'externalId' | 'location'
+      >
     > & {
       description?: string;
     },
@@ -74,6 +88,7 @@ export function toTransaction(
     international: p.international,
     ...(p.foreign ? { foreign: p.foreign } : {}),
     ...(p.cardLast4 ? { cardLast4: p.cardLast4 } : {}),
+    ...(p.location ? { location: p.location } : {}),
     ...(p.balanceCents !== undefined ? { balanceCents: p.balanceCents } : {}),
     ...(p.externalId ? { externalId: p.externalId } : {}),
     ...(ids.source === 'conta' ? { source: 'conta' as const } : {}),
@@ -180,6 +195,7 @@ export function buildDraft(
     ...(parsed.accountLabel ? { accountLabel: parsed.accountLabel } : {}),
     ...(isAccount ? { netMovementCents } : {}),
     ...(skipped > 0 ? { skippedDuplicates: skipped } : {}),
+    readerVersion: READER_VERSION,
     parsedTotalCents: spendingTotal(kept),
     transactionCount: kept.length,
     importedAt: new Date().toISOString(),

@@ -1023,6 +1023,11 @@ table.ledger {
   text-align: right;
 }
 
+.ledger__place {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
 .ledger .name-cell {
   display: flex;
   align-items: center;

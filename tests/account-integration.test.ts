@@ -12,6 +12,7 @@ import { compileRules } from '../src/categorization/categorizer';
 import { buildCategoryIndex } from '../src/domain/categories';
 import { parseCSVStatement } from '../src/parsing/csvStatement';
 import { extractLinesFromDocument } from '../src/parsing/extract';
+import type { Line } from '../src/parsing/lines';
 import { parseOFX } from '../src/parsing/ofx';
 import { parseStatementText, type ParsedStatement } from '../src/parsing/parseStatement';
 import { buildDraft, reconcile, type ImportDraft } from '../src/services/importService';
@@ -21,7 +22,7 @@ const fixtures = resolve(__dirname, 'fixtures');
 const rules = compileRules([]);
 const cats = buildCategoryIndex([]);
 
-async function pdfLines(name: string): Promise<string[]> {
+async function pdfLines(name: string): Promise<Line[]> {
   const data = new Uint8Array(readFileSync(resolve(fixtures, name)));
   const task = getDocument({ data, useSystemFonts: false, verbosity: 0 });
   const doc = await task.promise;
@@ -84,6 +85,18 @@ describe('extrato de conta em PDF', () => {
       'PIX ENVIADO MARIA DA SILVA',
       'PIX ENVIADO JOAO PEDREIRO',
     ]);
+  });
+
+  it('linha com a cidade embaixo da compra no débito vira local, não descrição', () => {
+    const padaria = draft.transactions.find((t) => t.rawDescription.includes('PADARIA REAL'));
+    expect(padaria).toMatchObject({
+      rawDescription: 'COMPRA CARTAO DEBITO PADARIA REAL',
+      location: 'São Paulo',
+    });
+    // Continuação que não é lugar continua indo para a descrição (nome de quem recebeu o Pix).
+    expect(draft.transactions.some((t) => t.rawDescription === 'PIX ENVIADO MARIA DA SILVA')).toBe(
+      true,
+    );
   });
 
   it('confere saldo anterior + movimentações = saldo final', () => {

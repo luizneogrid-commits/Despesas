@@ -71,6 +71,8 @@ export interface Transaction {
   international: boolean;
   foreign?: { currency: string; amountCents: number };
   cardLast4?: string;
+  /** Cidade/país impressos junto do estabelecimento (ex.: "São Paulo"); não fazem parte do nome. */
+  location?: string;
   categoryId: CategoryId;
   categorySource: CategorySource;
   /** Id da regra que definiu a categoria (quando houver). */
@@ -118,6 +120,8 @@ export interface Statement {
   accountLabel?: string;
   /** Movimentações já importadas de outro extrato e ignoradas nesta importação. */
   skippedDuplicates?: number;
+  /** Versão do leitor que gerou a importação (ausente = 1). Permite reler PDFs antigos. */
+  readerVersion?: number;
 }
 
 export type RuleMatch = 'contem' | 'comeca' | 'exato' | 'regex';

@@ -48,20 +48,82 @@ function groupRows(items: PositionedText[]): Row[] {
   return rows;
 }
 
-function rowToText(items: PositionedText[]): string {
-  let text = '';
+/**
+ * Trecho contínuo de texto numa linha (uma "célula"). Um vão maior que ~1
+ * caractere largo separa colunas: "PADARIA REAL" | "SAO PAULO" | "23,50".
+ */
+export interface Segment {
+  text: string;
+  /** Posição horizontal do início e do fim (pontos do PDF; em texto puro, caracteres). */
+  x: number;
+  x2: number;
+  /** Início/fim no texto da linha. */
+  start: number;
+  end: number;
+}
+
+export interface PdfLine {
+  text: string;
+  segments: Segment[];
+}
+
+/** Linha vinda do PDF (com posições) ou texto puro (testes, colagens). */
+export type Line = string | PdfLine;
+
+function rowToLine(items: PositionedText[]): PdfLine {
+  const cells: Array<{ x: number; x2: number; text: string }> = [];
   let prevEnd: number | null = null;
   for (const it of items) {
     const h = it.height > 0 ? it.height : 10;
-    if (prevEnd !== null) {
-      const gap = it.x - prevEnd;
-      if (gap > h * 2.5) text += '   ';
-      else if (gap > h * 0.12 && !text.endsWith(' ') && !it.str.startsWith(' ')) text += ' ';
+    const gap = prevEnd === null ? Infinity : it.x - prevEnd;
+    const cell = cells.at(-1);
+    if (!cell || gap > h * 0.9) {
+      cells.push({ x: it.x, x2: it.x + it.width, text: it.str });
+    } else {
+      cell.x2 = it.x + it.width;
+      const space =
+        gap > h * 0.12 && !cell.text.endsWith(' ') && !it.str.startsWith(' ') ? ' ' : '';
+      cell.text += space + it.str;
     }
-    text += it.str;
     prevEnd = it.x + it.width;
   }
-  return text.replace(/[ \t\u00a0]+/g, ' ').trim();
+  let text = '';
+  const segments: Segment[] = [];
+  for (const c of cells) {
+    const clean = c.text.replace(/[ \t\u00a0]+/g, ' ').trim();
+    if (!clean) continue;
+    if (text) text += ' ';
+    segments.push({
+      text: clean,
+      x: c.x,
+      x2: c.x2,
+      start: text.length,
+      end: text.length + clean.length,
+    });
+    text += clean;
+  }
+  return { text, segments };
+}
+
+/** Texto puro: colunas separadas por 2+ espaços; a posição é o índice do caractere. */
+export function toPdfLine(line: Line): PdfLine {
+  if (typeof line !== 'string') return line;
+  const segments: Segment[] = [];
+  for (const m of line.matchAll(/\S+(?: \S+)*/g)) {
+    const start = m.index ?? 0;
+    segments.push({
+      text: m[0],
+      x: start,
+      x2: start + m[0].length,
+      start,
+      end: start + m[0].length,
+    });
+  }
+  return { text: line, segments };
+}
+
+export function lineText(line: Line): string {
+  return typeof line === 'string' ? line : line.text;
 }
 
 /** Retorna o x da divisa entre colunas, ou null para layout de coluna única. */
@@ -86,26 +148,20 @@ export function detectColumnBoundary(rows: Row[]): number | null {
   return Math.min(...cuts.filter((c) => Math.abs(c - median) <= 25)) - 3;
 }
 
-/** Linhas de UMA página, já em ordem de leitura (coluna a coluna). */
-export function pageItemsToLines(items: PositionedText[]): string[] {
-  // Ignora texto girado (ex.: códigos verticais na margem).
+/** Linhas de UMA página, já em ordem de leitura (coluna a coluna), com posições. */
+export function pageItemsToLines(items: PositionedText[]): Line[] {
   const rows = groupRows(items);
   const boundary = detectColumnBoundary(rows);
-  if (boundary === null) {
-    return rows.map((r) => rowToText(r.items)).filter((l) => l.length > 0);
-  }
+  const toLines = (rs: Row[]) => rs.map((r) => rowToLine(r.items)).filter((l) => l.text.length > 0);
+  if (boundary === null) return toLines(rows);
   const left = groupRows(items.filter((i) => i.x < boundary));
   const right = groupRows(items.filter((i) => i.x >= boundary));
-  return [
-    ...left.map((r) => rowToText(r.items)).filter(Boolean),
-    BREAK_LINE,
-    ...right.map((r) => rowToText(r.items)).filter(Boolean),
-  ];
+  return [...toLines(left), BREAK_LINE, ...toLines(right)];
 }
 
 /** Compatível com o uso simples (uma página, sem detecção de colunas). */
 export function itemsToLines(items: PositionedText[]): string[] {
   return groupRows(items)
-    .map((r) => rowToText(r.items))
+    .map((r) => rowToLine(r.items).text)
     .filter((l) => l.length > 0);
 }

@@ -1,4 +1,5 @@
 import { isValidDate, monthFromToken, normalizeYear } from '../domain/dates';
+import { toPdfLine, type Line, type Segment } from './lines';
 
 /**
  * Tokenizador de linhas de fatura. Uma linha vira uma sequência de
@@ -17,6 +18,8 @@ export interface DateToken {
   raw: string;
   start: number;
   end: number;
+  /** Posição horizontal na página (quando a linha veio do PDF com posições). */
+  x?: number;
 }
 
 export interface AmountToken {
@@ -34,6 +37,7 @@ export interface AmountToken {
   raw: string;
   start: number;
   end: number;
+  x?: number;
 }
 
 export interface TextToken {
@@ -41,6 +45,7 @@ export interface TextToken {
   value: string;
   start: number;
   end: number;
+  x?: number;
 }
 
 export type Token = DateToken | AmountToken | TextToken;
@@ -159,4 +164,54 @@ export function tokenizeLine(line: string): Token[] {
   }
   pushText(cursor, line.length);
   return tokens;
+}
+
+/** Posição horizontal de um caractere da linha, interpolada dentro do bloco. */
+function xAt(segments: Segment[], pos: number): number {
+  for (const seg of segments) {
+    if (pos >= seg.start && pos < seg.end) {
+      const charWidth = (seg.x2 - seg.x) / Math.max(1, seg.text.length);
+      return seg.x + (pos - seg.start) * charWidth;
+    }
+  }
+  const next = segments.find((s) => s.start >= pos) ?? segments.at(-1);
+  return next ? next.x : pos;
+}
+
+/**
+ * Tokeniza uma linha preservando a geometria: cada token ganha sua posição x
+ * e um texto que atravessa colunas ("PADARIA REAL | SAO PAULO") é dividido
+ * em um token por coluna.
+ */
+export function tokenizePdfLine(line: Line): Token[] {
+  const { text, segments } = toPdfLine(line);
+  const out: Token[] = [];
+  for (const tok of tokenizeLine(text)) {
+    if (tok.kind !== 'text') {
+      out.push({ ...tok, x: xAt(segments, tok.start) });
+      continue;
+    }
+    const pieces = segments.filter((s) => s.end > tok.start && s.start < tok.end);
+    if (pieces.length <= 1) {
+      const lead = text.slice(tok.start, tok.end).search(/\S/);
+      out.push({ ...tok, x: xAt(segments, tok.start + Math.max(0, lead)) });
+      continue;
+    }
+    for (const seg of pieces) {
+      const from = Math.max(tok.start, seg.start);
+      const to = Math.min(tok.end, seg.end);
+      const slice = text.slice(from, to);
+      const value = slice.replace(/\s+/g, ' ').trim();
+      if (!value) continue;
+      const lead = slice.search(/\S/);
+      out.push({
+        kind: 'text',
+        value,
+        start: from,
+        end: to,
+        x: xAt(segments, from + Math.max(0, lead)),
+      });
+    }
+  }
+  return out;
 }

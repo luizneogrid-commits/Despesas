@@ -231,7 +231,7 @@ async function accountStatement() {
   const rows = [
     ['01/10', 'PIX RECEBIDO EMPRESA EXEMPLO LTDA', 850000, null],
     [null, 'PIX ENVIADO', -220000, 'MARIA DA SILVA - •••.456.789-•• - BCO EXEMPLO'],
-    ['03/10', 'COMPRA CARTAO DEBITO PADARIA REAL', -2350, null],
+    ['03/10', 'COMPRA CARTAO DEBITO PADARIA REAL', -2350, 'SAO PAULO BR'],
     [null, 'PAGAMENTO DE BOLETO ENEL SP', -18990, null],
     ['10/10', 'PAGAMENTO FATURA CARTAO', -282393, null],
     ['12/10', 'APLICACAO CDB', -100000, null],
@@ -269,6 +269,125 @@ async function accountStatement() {
   w.text(`Saldo final em 31/10/2026 ${brl(bal)}`, 40, y - 10, 10, bold);
   const net = bal - opening;
   return { bytes: await doc.save(), total: net, count: rows.length, closing: bal };
+}
+
+// ------------------------------------------------------------ 7. faturas com cidade
+// O nome do estabelecimento vem acompanhado da cidade (campo "nome/cidade/país"
+// das transações de cartão): numa coluna própria, cortada em 13 caracteres,
+// grudada no nome ou com o estabelecimento à esquerda da data.
+function cityRows(w, rows, cols, y0, bold) {
+  let y = y0;
+  for (const r of rows) {
+    for (const [key, x] of Object.entries(cols)) {
+      if (key === 'value') continue;
+      const v = r[key];
+      if (v) w.text(v, x, y);
+    }
+    const value = r.cents < 0 && !r.payment ? `${brl(Math.abs(r.cents))}-` : brl(r.cents);
+    w.right(value, cols.value, y);
+    y -= 15;
+  }
+  return y;
+}
+
+const countable = (rows) => rows.filter((r) => !r.payment);
+const totalOf = (rows) => countable(rows).reduce((a, r) => a + r.cents, 0);
+
+// 7a. Data | Estabelecimento | Cidade | Valor
+async function cityColumn() {
+  const { doc, font, bold } = await makeDoc();
+  const page = doc.addPage([595, 842]);
+  const w = writer(page, font);
+  const rows = [
+    { date: '03/10', name: 'PADARIA REAL', city: 'SAO PAULO', cents: 2350 },
+    { date: '04/10', name: 'RESTAURANTE SABOR MINEIRO', city: 'BELO HORIZONT', cents: 8790 },
+    { date: '05/10', name: 'UBER *TRIP HELP.UBER.COSAO PAULO BR', cents: 1840 },
+    { date: '06/10', name: 'MERCADO DO JOAO CURITIBA PR', cents: 15420 },
+    { date: '07/10', name: 'AMAZON WEB SERVICES', city: 'SEATTLE US', cents: 5432 },
+    { date: '08/10', name: 'DROGARIA SAO PAULO', city: 'CAMPINAS', cents: 6745 },
+    { date: '09/10', name: 'POSTO IPIRANGA', city: 'RIO DE JANEIRO', cents: 18000 },
+    { date: '10/10', name: 'PAGAMENTO EFETUADO', cents: -150000, payment: true },
+    { date: '11/10', name: 'NETFLIX.COM', city: 'SAO PAULO', cents: 5590 },
+    { date: '12/10', name: 'LOJA DE MOVEIS 03/10', city: 'SAO JOSE DOS', cents: 32000 },
+    { date: '13/10', name: 'IFD*PIZZARIA BELLA', city: 'SAO PAULO', cents: 4590 },
+    { date: '14/10', name: 'CAFETERIA NATAL', city: 'NATAL', cents: 1500 },
+  ];
+  const total = totalOf(rows);
+  w.text('Cartão Exemplo Platinum — Banco Modelo (DADOS FICTÍCIOS)', 40, 800, 11, bold);
+  w.text('Vencimento: 05/11/2026', 40, 780);
+  w.text(`Total desta fatura R$ ${brl(total)}`, 240, 780, 10, bold);
+  const cols = { date: 40, name: 95, city: 330, value: 555 };
+  w.text('Data', cols.date, 750, 9, bold);
+  w.text('Estabelecimento', cols.name, 750, 9, bold);
+  w.text('Cidade', cols.city, 750, 9, bold);
+  w.right('Valor (R$)', cols.value, 750, 9, bold);
+  cityRows(w, rows, cols, 732, bold);
+  return { bytes: await doc.save(), total, count: rows.length };
+}
+
+// 7b. Estabelecimento | Data | Local | Valor (nome na coluna mais à esquerda), em duas páginas
+async function merchantFirst() {
+  const { doc, font, bold } = await makeDoc();
+  const page1 = [
+    { name: 'PADARIA REAL', date: '03/10', city: 'SAO PAULO', cents: 2350 },
+    { name: 'RESTAURANTE SABOR MINEIRO', date: '04/10', city: 'BELO HORIZONT', cents: 8790 },
+    { name: 'UBER *TRIP', date: '05/10', city: 'SAO PAULO', cents: 1840 },
+    { name: 'NETFLIX.COM', date: '06/10', cents: 5590 },
+    { name: 'DROGARIA SAO PAULO', date: '08/10', city: 'CAMPINAS', cents: 6745 },
+    { name: 'SUPERMERCADO BOM PRECO', date: '09/10', city: 'RECIFE', cents: 24510 },
+    { name: 'PAGAMENTO RECEBIDO', date: '10/10', cents: -150000, payment: true },
+    { name: 'SPOTIFY', date: '11/10', city: 'STOCKHOLM', cents: 2190 },
+  ];
+  const page2 = [
+    { name: 'LOJA DE MOVEIS PARCELA 3 DE 10', date: '12/10', city: 'SAO JOSE DOS', cents: 32000 },
+    { name: 'AMAZON MARKETPLACE', date: '13/10', cents: 12990 },
+    { name: 'ESTORNO NETFLIX', date: '14/10', cents: -5590 },
+    { name: 'POSTO IPIRANGA', date: '15/10', city: 'SOROCABA', cents: 18000 },
+  ];
+  const all = [...page1, ...page2];
+  const total = totalOf(all);
+  const cols = { name: 40, date: 260, city: 320, value: 555 };
+  let page = doc.addPage([595, 842]);
+  let w = writer(page, font);
+  w.text('Cartão Exemplo Black — Banco Modelo (DADOS FICTÍCIOS)', 40, 800, 11, bold);
+  w.text('Data de vencimento 05/11/2026', 40, 780);
+  w.text(`Total desta fatura R$ ${brl(total)}`, 300, 780, 10, bold);
+  w.text('Estabelecimento', cols.name, 750, 9, bold);
+  w.text('Data', cols.date, 750, 9, bold);
+  w.text('Local', cols.city, 750, 9, bold);
+  w.right('Valor (R$)', cols.value, 750, 9, bold);
+  cityRows(w, page1, cols, 732, bold);
+  // 2ª página sem repetir o cabeçalho
+  page = doc.addPage([595, 842]);
+  w = writer(page, font);
+  cityRows(w, page2, cols, 800, bold);
+  return { bytes: await doc.save(), total, count: all.length };
+}
+
+// 7c. Sem cabeçalho: nome à esquerda, data, cidade (inclui cidades fora da lista) e valor
+async function noHeader() {
+  const { doc, font, bold } = await makeDoc();
+  const page = doc.addPage([595, 842]);
+  const w = writer(page, font);
+  const rows = [
+    { name: 'PADARIA REAL', date: '03/10', city: 'SAO PAULO', cents: 2350 },
+    { name: 'ACOUGUE DO ZE', date: '04/10', city: 'ITAPETININGA', cents: 8790 },
+    { name: 'FARMACIA POPULAR', date: '05/10', city: 'CAMPINAS', cents: 1840 },
+    { name: 'RESTAURANTE DA PRACA', date: '06/10', city: 'SAO PAULO', cents: 5590 },
+    { name: 'MERCADINHO ESTRELA', date: '07/10', city: 'ITAPETININGA', cents: 4590 },
+    { name: 'POSTO TREVO', date: '08/10', city: 'SOROCABA', cents: 18000 },
+    { name: 'LIVRARIA CULTURA', date: '09/10', city: 'SAO PAULO', cents: 6745 },
+  ];
+  const total = totalOf(rows);
+  w.text('Fatura Cartão Exemplo (DADOS FICTÍCIOS)', 40, 800, 11, bold);
+  w.text('Vencimento: 15/11/2026', 40, 780);
+  w.text(`Total desta fatura R$ ${brl(total)}`, 240, 780, 10, bold);
+  const cols = { name: 40, date: 250, city: 310, value: 555 };
+  const y = cityRows(w, rows, cols, 750, bold);
+  w.text('Pagamento mínimo', cols.name, y - 10);
+  w.text('15/11', cols.date, y - 10);
+  w.right(brl(Math.round(total * 0.15)), cols.value, y - 10);
+  return { bytes: await doc.save(), total, count: rows.length };
 }
 
 const account = await accountStatement();
@@ -320,6 +439,9 @@ const outputs = {
   'fatura-coluna-unica.pdf': await singleColumn(),
   'fatura-duas-colunas.pdf': await twoColumns(),
   'fatura-tabela.pdf': await table(),
+  'fatura-cidades.pdf': await cityColumn(),
+  'fatura-estab-esquerda.pdf': await merchantFirst(),
+  'fatura-sem-cabecalho.pdf': await noHeader(),
 };
 
 const manifest = {};

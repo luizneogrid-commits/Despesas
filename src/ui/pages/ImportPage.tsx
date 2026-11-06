@@ -15,6 +15,7 @@ import { addMonths, formatDateBR, formatYearMonth } from '../../domain/dates';
 import { formatBRL, formatMovement } from '../../domain/money';
 import {
   findConflicts,
+  isOutdatedRead,
   reconcile,
   withReferenceMonth,
   type ImportDraft,
@@ -360,7 +361,18 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
             <span>{w}</span>
           </div>
         ))}
-        {duplicateOf && (
+        {duplicateOf && isOutdatedRead(duplicateOf) && (
+          <div className="notice">
+            <Info size={16} aria-hidden="true" />
+            <span>
+              Este arquivo já foi importado em {formatDateBR(duplicateOf.importedAt.slice(0, 10))},
+              com uma versão anterior do leitor. A leitura nova separa o nome do estabelecimento da
+              cidade. Substitua a importação anterior para usar a leitura nova: as categorias que
+              você ajustou à mão são mantidas.
+            </span>
+          </div>
+        )}
+        {duplicateOf && !isOutdatedRead(duplicateOf) && (
           <div className="notice notice--bad">
             <CircleAlert size={16} aria-hidden="true" />
             <span>
@@ -447,6 +459,7 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
                     <td className="num">{formatDateBR(t.date)}</td>
                     <td>
                       {t.description}
+                      {t.location && <span className="ledger__place"> · {t.location}</span>}
                       {t.installment && (
                         <span className="chip chip--carbon" style={{ marginLeft: 6 }}>
                           {t.installment.current}/{t.installment.total}
@@ -479,7 +492,16 @@ function DraftReview({ item }: { item: QueueItem & { draft: ImportDraft } }) {
         )}
       </div>
       <div className="receipt__actions">
-        {sameMonthAs ? (
+        {duplicateOf && isOutdatedRead(duplicateOf) ? (
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={draft.transactions.length === 0}
+            onClick={() => doImport(duplicateOf.id)}
+          >
+            Substituir pela leitura nova
+          </button>
+        ) : sameMonthAs ? (
           <>
             <button type="button" className="btn btn--primary" onClick={() => doImport()}>
               Importar como outra fatura

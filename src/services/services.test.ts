@@ -50,7 +50,7 @@ describe('importação', () => {
     const csv = transactionsToCSV(draft.transactions, buildCategoryIndex([]));
     expect(csv.startsWith('\uFEFFData;')).toBe(true);
     expect(csv).toContain(
-      '05/10/2026;IFD*Pizzaria Bella;iFood;Delivery de comida;Estilo de vida;Compra;60,00',
+      '05/10/2026;IFD*Pizzaria Bella;iFood;;Delivery de comida;Estilo de vida;Compra;60,00',
     );
     expect(csv).toContain(`"'=Hyperlink(""X"") Loja"`);
   });

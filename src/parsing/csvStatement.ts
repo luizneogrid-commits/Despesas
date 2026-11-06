@@ -9,6 +9,7 @@ import { normalizeText, prettifyDescription } from '../categorization/normalize'
 import { isValidDate, normalizeYear, toISO, yearMonth } from '../domain/dates';
 import type { AccountType } from '../domain/types';
 import { parseCSV } from '../utils/csv';
+import { separateLocations } from './merchantText';
 import { detectIssuer } from './metadata';
 import { classifyAccount } from './parseAccount';
 import { classify, type ParsedStatement, type ParsedTransaction } from './parseStatement';
@@ -172,7 +173,7 @@ export function parseCSVStatement(
     format: 'csv',
     referenceMonth: yearMonth(y ?? 1970, m ?? 1),
     referenceEstimated: accountType === 'cartao',
-    transactions,
+    transactions: separateLocations(transactions),
     unrecognizedLines: unrecognizedLines.slice(0, 50),
     skippedFutureCount: 0,
     warnings: transactions.length === 0 ? ['Nenhum lançamento encontrado no CSV.'] : [],

@@ -14,7 +14,15 @@
 import { normalizeText, prettifyDescription } from '../categorization/normalize';
 import { inferYear, isValidDate, parseISO, toISO, todayISO, yearMonth } from '../domain/dates';
 import type { TxKind } from '../domain/types';
-import { BREAK_LINE } from './lines';
+import { BREAK_LINE, lineText, type Line } from './lines';
+import {
+  buildDocStats,
+  chooseMerchant,
+  detectHeader,
+  headerFits,
+  type HeaderModel,
+  type Part,
+} from './merchantText';
 import {
   detectIssuer,
   findAccountLabel,
@@ -23,7 +31,14 @@ import {
   findPeriod,
 } from './metadata';
 import type { ParsedStatement, ParsedTransaction } from './parseStatement';
-import { tokenizeLine, type AmountToken, type DateToken, type Token } from './tokenize';
+import { isLocationText, prettyLocation } from './places';
+import {
+  tokenizePdfLine,
+  type AmountToken,
+  type DateToken,
+  type TextToken,
+  type Token,
+} from './tokenize';
 
 /** Pagamento da fatura do cartão: neutro (as compras já estão na fatura). */
 export const CARD_PAYMENT_RE =
@@ -72,7 +87,11 @@ interface DraftTx {
   day: number;
   month: number;
   year?: number;
-  text: string;
+  /** Textos do lançamento com posição (inclui linhas de continuação). */
+  parts: Part[];
+  dateX?: number;
+  header: HeaderModel | null;
+  location?: string;
   movement: AmountToken;
   balance?: AmountToken;
   credit?: boolean;
@@ -90,8 +109,11 @@ function signedBalance(t: AmountToken): number {
   return t.minus || t.debitMark ? -t.abs : t.abs;
 }
 
-export function parseAccountText(lines: string[], opts: { today?: Date } = {}): ParsedStatement {
-  const fullText = lines.filter((l) => l !== BREAK_LINE).join('\n');
+export function parseAccountText(lines: Line[], opts: { today?: Date } = {}): ParsedStatement {
+  const fullText = lines
+    .map(lineText)
+    .filter((l) => l !== BREAK_LINE)
+    .join('\n');
   const issuer = detectIssuer(fullText);
   const period = findPeriod(fullText);
   const balances = findBalances(fullText);
@@ -104,25 +126,36 @@ export function parseAccountText(lines: string[], opts: { today?: Date } = {}): 
   let skipFuture = false;
   let skippedFutureCount = 0;
   let lastWasTx = false;
+  let header: HeaderModel | null = null;
 
-  for (const line of lines) {
+  for (const entry of lines) {
+    const line = lineText(entry);
     if (line === BREAK_LINE) {
       lastWasTx = false;
       continue;
     }
-    const tokens: Token[] = tokenizeLine(line);
+    const tokens: Token[] = tokenizePdfLine(entry);
     const first = tokens[0];
     if (first?.kind === 'date') current = first;
     const amounts = tokens.filter(
       (t): t is AmountToken => t.kind === 'amount' && t.currency !== 'USD' && t.currency !== 'EUR',
     );
-    const texts = tokens
-      .filter((t) => t.kind === 'text')
-      .map((t) => (t.kind === 'text' ? t.value : ''));
-    const text = texts.join(' ').replace(/\s+/g, ' ').trim();
+    const textTokens = tokens.filter((t): t is TextToken => t.kind === 'text');
+    const parts: Part[] = textTokens.map((t) => ({ text: t.value, x: t.x ?? t.start }));
+    const text = textTokens
+      .map((t) => t.value)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     const normalized = normalizeText(text);
 
     if (amounts.length === 0) {
+      const h = tokens.every((t) => t.kind === 'text') ? detectHeader(parts) : null;
+      if (h) {
+        header = h;
+        lastWasTx = false;
+        continue;
+      }
       if (FUTURE_RE.test(line)) {
         skipFuture = true;
       } else if (skipFuture && RESUME_RE.test(line)) {
@@ -134,10 +167,11 @@ export function parseAccountText(lines: string[], opts: { today?: Date } = {}): 
         !IGNORE_LINE.test(normalized) &&
         first?.kind !== 'date'
       ) {
-        // Continuação da descrição (ex.: "MARIA DA SILVA - •••.456.789-••").
+        // Continuação da descrição (ex.: "MARIA DA SILVA - •••.456.789-••") ou o lugar da compra.
         const last = drafts.at(-1);
         if (last && last.continuationCount < 2) {
-          last.text = `${last.text} ${text}`;
+          if (isLocationText(text)) last.location ??= prettyLocation(normalizeText(text));
+          else last.parts.push(...parts);
           last.continuationCount += 1;
           continue;
         }
@@ -166,7 +200,9 @@ export function parseAccountText(lines: string[], opts: { today?: Date } = {}): 
       day: current.day,
       month: current.month,
       ...(current.year ? { year: current.year } : {}),
-      text,
+      parts,
+      ...(first?.kind === 'date' && first.x !== undefined ? { dateX: first.x } : {}),
+      header,
       movement,
       ...(balance ? { balance } : {}),
       ...(credit !== undefined ? { credit } : {}),
@@ -193,9 +229,15 @@ export function parseAccountText(lines: string[], opts: { today?: Date } = {}): 
     }
   }
 
+  // O que é nome e o que é lugar, olhando o documento inteiro.
+  const stats = buildDocStats(drafts.map((d) => d.parts));
   const transactions: ParsedTransaction[] = [];
   for (const d of drafts) {
-    const description = cleanAccountDescription(d.text);
+    const header = d.header && headerFits(d.header, d.dateX, d.parts) ? d.header : null;
+    const choice = chooseMerchant(d.parts, { header, stats });
+    const joined = d.parts.map((p) => p.text).join(' ');
+    const description = cleanAccountDescription(choice.fromLocation ? joined : choice.merchant);
+    const location = d.location ?? (choice.fromLocation ? undefined : choice.location);
     const normalized = normalizeText(description);
     if (!normalized) continue;
     const credit =
@@ -212,6 +254,7 @@ export function parseAccountText(lines: string[], opts: { today?: Date } = {}): 
       kind,
       international: false,
       sourceLine: d.line,
+      ...(location ? { location } : {}),
       ...(d.balance ? { balanceCents: signedBalance(d.balance) } : {}),
     });
   }

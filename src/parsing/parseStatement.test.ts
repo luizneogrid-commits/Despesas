@@ -97,3 +97,73 @@ describe('parseStatementText', () => {
     expect(r.warnings.length).toBeGreaterThan(0);
   });
 });
+
+describe('estabelecimento × cidade em linhas de texto', () => {
+  const base = ['Vencimento 10/11/2026'];
+
+  it('nome à esquerda da data e cidade antes ou depois dela', () => {
+    const r = parseStatementText([
+      ...base,
+      'PADARIA REAL       05/10   SAO PAULO      23,50',
+      'MERCADO BOM PRECO  CAMPINAS   06/10      40,00',
+      'ACOUGUE DO ZE      07/10   SOROCABA       10,00',
+    ]);
+    expect(r.transactions.map((t) => [t.rawDescription, t.location])).toEqual([
+      ['PADARIA REAL', 'São Paulo'],
+      ['MERCADO BOM PRECO', 'Campinas'],
+      ['ACOUGUE DO ZE', 'Sorocaba'],
+    ]);
+  });
+
+  it('nome numa linha à parte, acima da linha com data, cidade e valor', () => {
+    const r = parseStatementText([
+      ...base,
+      'Data   Estabelecimento        Cidade         Valor',
+      '       PADARIA REAL',
+      '05/10                         SAO PAULO      23,50',
+      '       FARMACIA POPULAR',
+      '06/10                         CAMPINAS       12,00',
+    ]);
+    expect(r.transactions.map((t) => [t.rawDescription, t.location])).toEqual([
+      ['PADARIA REAL', 'São Paulo'],
+      ['FARMACIA POPULAR', 'Campinas'],
+    ]);
+  });
+
+  it('em layout comum, texto antes da data não vira lançamento (resumos)', () => {
+    const r = parseStatementText([
+      ...base,
+      '05/10 PADARIA REAL 23,50',
+      '06/10 NETFLIX.COM 55,90',
+      'Limite disponível em 10/11 5.000,00',
+      'Compras do mês 10/11 79,40',
+    ]);
+    expect(r.transactions.map((t) => t.rawDescription)).toEqual(['PADARIA REAL', 'NETFLIX.COM']);
+  });
+
+  it('cidade repetida no fim de vários nomes sai mesmo quando é ambígua', () => {
+    const r = parseStatementText([
+      ...base,
+      '05/10 PADARIA REAL NATAL 23,50',
+      '06/10 FARMACIA DO POVO NATAL 12,00',
+      '07/10 BAR DO ZE NATAL 30,00',
+      '08/10 LOJA NOVA NATAL 9,00',
+    ]);
+    expect(r.transactions.map((t) => t.rawDescription)).toEqual([
+      'PADARIA REAL',
+      'FARMACIA DO POVO',
+      'BAR DO ZE',
+      'LOJA NOVA',
+    ]);
+    expect(r.transactions.every((t) => t.location === 'Natal')).toBe(true);
+  });
+
+  it('cidade na linha de baixo vira o local da compra', () => {
+    const r = parseStatementText([...base, '05/10 PADARIA REAL 23,50', 'SAO PAULO BR']);
+    expect(r.transactions[0]).toMatchObject({
+      rawDescription: 'PADARIA REAL',
+      location: 'São Paulo',
+    });
+    expect(r.unrecognizedLines).toEqual([]);
+  });
+});

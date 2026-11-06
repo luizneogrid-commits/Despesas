@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { categorize, compileRules, kindForScope } from '../categorization/categorizer';
-import { displayMerchant } from '../categorization/normalize';
+import { kindForScope } from '../categorization/categorizer';
 import { buildCategoryIndex, scopeOf, slugify } from '../domain/categories';
 import type {
   Category,
@@ -13,9 +12,12 @@ import type {
   UserRule,
 } from '../domain/types';
 import { buildDemoState } from '../services/demo';
+import { carryOverManual, recategorize } from '../services/recategorize';
 import type { ImportDraft } from '../services/importService';
 import { emptyState, loadState, migrate, saveState } from '../storage/persist';
 import { uid } from '../utils/id';
+
+export { recategorize };
 
 export type StorageStatus = 'carregando' | 'local' | 'memoria';
 
@@ -94,35 +96,6 @@ interface AppState extends PersistedState {
   restoreBackup: (raw: unknown) => boolean;
 }
 
-/**
- * Recalcula categoria e nome de todos os lançamentos que não foram ajustados
- * à mão, aplicando o de/para do usuário e a base embutida.
- */
-export function recategorize(
-  txs: Transaction[],
-  rules: UserRule[],
-  categories: Category[],
-): Transaction[] {
-  const compiled = compileRules(rules, categories);
-  const valid = buildCategoryIndex(categories);
-  return txs.map((t) => {
-    if (t.categorySource === 'manual' && valid.has(t.categoryId)) return t;
-    // Sempre a partir do tipo lido no documento: apagar um de/para desfaz a conversão.
-    const base = t.parsedKind ?? t.kind;
-    const r = categorize(t.rawDescription, base, compiled, t.amountCents);
-    const next: Transaction = {
-      ...t,
-      kind: r.kind ?? base,
-      categoryId: r.categoryId,
-      categorySource: r.source,
-      merchantName: r.brand ?? displayMerchant(t.rawDescription),
-    };
-    if (r.ruleId) next.ruleId = r.ruleId;
-    else delete next.ruleId;
-    return next;
-  });
-}
-
 function persistable(s: AppState): PersistedState {
   return {
     schemaVersion: s.schemaVersion,
@@ -153,7 +126,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
     );
     if (opts?.replaceStatementId) dropIds.add(opts.replaceStatementId);
     // Reaplica regras do usuário criadas depois do rascunho ter sido montado.
-    const txs = recategorize(draft.transactions, s.rules, s.customCategories);
+    let txs = recategorize(draft.transactions, s.rules, s.customCategories);
+    // Substituindo uma importação: mantém as categorias ajustadas à mão e as exclusões.
+    if (opts?.replaceStatementId) {
+      const replaced = opts.replaceStatementId;
+      txs = carryOverManual(
+        txs,
+        s.transactions.filter((t) => t.statementId === replaced),
+      );
+    }
     set({
       statements: [...s.statements.filter((st) => !dropIds.has(st.id)), draft.statement].sort(
         (a, b) => a.referenceMonth.localeCompare(b.referenceMonth),
